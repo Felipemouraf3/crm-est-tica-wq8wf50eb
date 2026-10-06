@@ -9,6 +9,7 @@ import Index from './pages/Index'
 import ForgotPassword from './pages/ForgotPassword'
 import SignUp from './pages/SignUp'
 import Dashboard from './pages/Dashboard'
+import Admin from './pages/Admin'
 import NotFound from './pages/NotFound'
 
 const App = () => (
@@ -23,6 +24,7 @@ const App = () => (
             <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route path="/signup" element={<SignUp />} />
             <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/admin" element={<Admin />} />
           </Route>
           <Route path="*" element={<NotFound />} />
         </Routes>

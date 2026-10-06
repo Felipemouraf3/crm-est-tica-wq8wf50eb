@@ -14,6 +14,7 @@ import {
   CheckCircle2,
   Bell,
   Search,
+  Settings,
 } from 'lucide-react'
 import { useAuth } from '@/hooks/use-auth'
 
@@ -105,6 +106,17 @@ export default function Dashboard() {
             >
               <Bell className="w-5 h-5" />
               <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-[#D4AF37]" />
+            </button>
+
+            {/* Atalho Administração */}
+            <button
+              type="button"
+              onClick={() => navigate('/admin')}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold text-[#B8960E] hover:bg-[#FFF8ED] border border-[#F1E5C8] transition-colors cursor-pointer"
+              aria-label="Ir para administração"
+            >
+              <Settings className="w-4 h-4" />
+              <span className="hidden sm:inline">Administração</span>
             </button>
 
             {/* Perfil & Botão Sair */}
