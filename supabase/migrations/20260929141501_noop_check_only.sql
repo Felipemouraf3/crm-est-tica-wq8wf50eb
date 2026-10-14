@@ -1,0 +1,1 @@
+-- no-op schema inspection marker; does not change database objects

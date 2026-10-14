@@ -1,4 +1,7 @@
 -- Migration: Create profiles table, trigger for new users, and seed admin user
+-- NOTA P2-S01: o bloco DO $$ de seed com senha foi REMOVIDO desta cópia (segurança).
+-- O banco real foi criado pela versão original; em reset/banco novo, usuários
+-- nascem exclusivamente por convite (admin_invite_user). Registro em 06_notas/.
 CREATE TABLE IF NOT EXISTS public.profiles (
   id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   name TEXT NOT NULL DEFAULT '',
@@ -9,10 +12,8 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Enable RLS
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 
--- Idempotent RLS Policies
 DROP POLICY IF EXISTS "authenticated_select_profiles" ON public.profiles;
 CREATE POLICY "authenticated_select_profiles" ON public.profiles
   FOR SELECT TO authenticated USING (true);
@@ -25,7 +26,6 @@ DROP POLICY IF EXISTS "authenticated_update_profiles" ON public.profiles;
 CREATE POLICY "authenticated_update_profiles" ON public.profiles
   FOR UPDATE TO authenticated USING (auth.uid() = id) WITH CHECK (auth.uid() = id);
 
--- Trigger to create profile when auth.users is created
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS trigger AS $$
 BEGIN
@@ -47,44 +47,4 @@ CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
 
--- Seed initial user: felipef3energydrink@gmail.com with password Skip@Pass
-DO $$
-DECLARE
-  seed_user_id UUID;
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM auth.users WHERE email = 'felipef3energydrink@gmail.com') THEN
-    seed_user_id := gen_random_uuid();
-    INSERT INTO auth.users (
-      id, instance_id, email, encrypted_password, email_confirmed_at,
-      created_at, updated_at, raw_app_meta_data, raw_user_meta_data,
-      is_super_admin, role, aud,
-      confirmation_token, recovery_token, email_change_token_new,
-      email_change, email_change_token_current,
-      phone, phone_change, phone_change_token, reauthentication_token
-    ) VALUES (
-      seed_user_id,
-      '00000000-0000-0000-0000-000000000000',
-      'felipef3energydrink@gmail.com',
-      crypt('Skip@Pass', gen_salt('bf')),
-      NOW(), NOW(), NOW(),
-      '{"provider": "email", "providers": ["email"]}',
-      '{"name": "Dra. Ana Silveira", "clinic_name": "Silveira Estética Avançada"}',
-      false, 'authenticated', 'authenticated',
-      '',
-      '',
-      '',
-      '',
-      '',
-      NULL,
-      '',
-      '',
-      ''
-    );
-
-    INSERT INTO public.profiles (id, email, name, clinic_name, role)
-    VALUES (seed_user_id, 'felipef3energydrink@gmail.com', 'Dra. Ana Silveira', 'Silveira Estética Avançada', 'admin')
-    ON CONFLICT (id) DO UPDATE
-    SET name = 'Dra. Ana Silveira',
-        clinic_name = 'Silveira Estética Avançada';
-  END IF;
-END $$;
+-- seed removido em P2-S01; usuário criado por convite
