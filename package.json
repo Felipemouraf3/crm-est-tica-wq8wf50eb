@@ -14,8 +14,9 @@
     "format": "oxfmt",
     "format:check": "oxfmt --check",
     "preview": "vite preview",
-    "test": "echo \"there are no tests for this project\" && exit 0",
-    "test:watch": "echo \"there are no tests for this project\" && exit 0"
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "scan:secrets": "node scripts/scan-secrets.mjs src supabase"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.4.0",
@@ -71,6 +72,10 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@testing-library/dom": "^10.4.0",
+    "@testing-library/react": "^16.1.0",
+    "jsdom": "^25.0.1",
+    "vitest": "^3.0.5",
     "@tailwindcss/typography": "^0.5.20",
     "@types/node": "^26.0.0",
     "@types/react": "^19.2.17",
