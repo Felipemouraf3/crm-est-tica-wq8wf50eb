@@ -23,7 +23,7 @@ export default function Index() {
   // Se já houver sessão ativa, redireciona diretamente para o painel
   useEffect(() => {
     if (!authLoading && session) {
-      navigate('/dashboard', { replace: true })
+      navigate('/inicio', { replace: true })
     }
   }, [session, authLoading, navigate])
 
@@ -134,7 +134,7 @@ export default function Index() {
             // no-op
           }
         }
-        navigate('/dashboard')
+        navigate('/inicio')
       }
     } catch {
       setFormError('Não foi possível completar a ação. Tente novamente.')
@@ -345,37 +345,7 @@ export default function Index() {
           </button>
         </form>
 
-        {/* Divisor "ou" */}
-        <div className="relative my-7">
-          <div className="absolute inset-0 flex items-center">
-            <div className="w-full border-t border-[#F1E5C8]" />
-          </div>
-          <div className="relative flex justify-center text-xs uppercase">
-            <span className="bg-white px-4 text-[#6B6560] font-medium tracking-wider">ou</span>
-          </div>
-        </div>
-
-        {/* Link para Cadastro / Solicitar Acesso */}
-        <div className="text-center">
-          <p className="text-sm text-[#6B6560]">
-            Ainda não possui uma conta?{' '}
-            <Link
-              to="/signup"
-              className="font-semibold text-[#D4AF37] hover:text-[#B8960E] hover:underline transition-colors ml-1 outline-none focus-visible:ring-2 focus-visible:ring-[#D4AF37]/50 rounded"
-            >
-              Solicitar acesso
-            </Link>
-          </p>
-        </div>
-
-        {/* Dica de credenciais de teste para facilidade de avaliação */}
-        <div className="mt-8 pt-4 border-t border-[#F1E5C8]/80 text-center">
-          <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#FFF8ED] text-xs text-[#92750B] border border-[#F1E5C8]">
-            <span className="font-semibold">Acesso de Demonstração:</span>
-            <span className="font-mono text-[11px]">felipef3energydrink@gmail.com</span> /{' '}
-            <span className="font-mono text-[11px]">Skip@Pass</span>
-          </div>
-        </div>
+        {/* P2-S01-T03: acesso somente por convite — sem cadastro público e sem dica de credenciais */}
       </div>
     </AuthLayout>
   )
