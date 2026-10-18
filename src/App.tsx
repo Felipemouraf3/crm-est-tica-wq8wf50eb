@@ -9,6 +9,7 @@ import Index from './pages/Index'
 import ForgotPassword from './pages/ForgotPassword'
 import Inicio from './pages/Inicio'
 import AdminProtegido from './pages/AdminProtegido'
+import SegundoFator from './pages/SegundoFator'
 import NotFound from './pages/NotFound'
 
 const App = () => (
@@ -24,6 +25,7 @@ const App = () => (
             {/* /signup removida em P2-S01-T03: acesso somente por convite */}
             <Route path="/inicio" element={<Inicio />} />
             <Route path="/dashboard" element={<Navigate to="/inicio" replace />} />
+            <Route path="/segundo-fator" element={<SegundoFator />} />
             <Route path="/admin" element={<AdminProtegido />} />
           </Route>
           <Route path="*" element={<NotFound />} />

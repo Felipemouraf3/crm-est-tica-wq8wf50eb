@@ -1,4 +1,4 @@
-// src/components/guards.tsx — P2-S01-T03
+// src/components/guards.tsx — P2-S01-T03 + tela de segundo fator (2026-10-18)
 // RequireAuth (sessão), RequireRole (vínculo+papel, com AAL2 p/ owner/clinic_admin),
 // EmptyState e ErrorState (correlation_id copiável). Sem `as any`.
 import { useEffect, useState, type ReactNode } from 'react'
@@ -154,14 +154,22 @@ export function RequireRole({
     return <EmptyState titulo="Acesso restrito" mensagem="Seu papel não permite esta área." />
   }
   if (estado.tipo === 'precisa_mfa') {
-    return (
-      <EmptyState
-        titulo="Segundo fator necessário"
-        mensagem="Esta área exige verificação em duas etapas. Ative o aplicativo autenticador e tente novamente."
-      />
-    )
+    // manda para a tela de segundo fator; após verificar, volta para /admin
+    return <SegundoFatorRedirect />
   }
   return <>{children}</>
+}
+
+function SegundoFatorRedirect() {
+  const navigate = useNavigate()
+  useEffect(() => {
+    navigate('/segundo-fator?next=/admin', { replace: true })
+  }, [navigate])
+  return (
+    <div className="flex min-h-screen items-center justify-center" aria-busy="true">
+      <div className="h-10 w-10 animate-spin rounded-full border-2 border-[#D4AF37] border-t-transparent" />
+    </div>
+  )
 }
 
 export function EmptyState({ titulo, mensagem }: { titulo: string; mensagem?: string }) {
