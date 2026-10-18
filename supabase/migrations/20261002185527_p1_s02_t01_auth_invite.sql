@@ -127,14 +127,7 @@ CREATE TRIGGER block_public_signup_trigger
   FOR EACH ROW EXECUTE FUNCTION public.block_public_signup();
 
 -- ============================================================
--- 3) Memberships iniciais do owner (Felipe) nas duas clínicas
+-- 3) Memberships iniciais do owner — DADO, não schema; removido da
+-- árvore em P2-S01 (varredura de segredos: zero e-mails pessoais).
+-- No banco real o bloco original já foi aplicado (2026-10-02).
 -- ============================================================
-INSERT INTO public.memberships (user_id, organization_id, clinic_id, role, active)
-SELECT u.id, c.organization_id, c.id, 'owner', true
-FROM auth.users u
-CROSS JOIN public.clinics c
-WHERE u.email = 'felipef3energydrink@gmail.com'
-AND NOT EXISTS (
-  SELECT 1 FROM public.memberships m
-  WHERE m.user_id = u.id AND m.clinic_id = c.id AND m.role = 'owner'
-);
