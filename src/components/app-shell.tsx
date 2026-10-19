@@ -1,4 +1,4 @@
-// src/components/app-shell.tsx — P2-S01-T03 + P2-S02-T03
+// src/components/app-shell.tsx — P2-S01-T03 + P2-S02-T03 + P2-S03-T01
 // Casca do app: menu lateral por papel + topo com seletor de clínica.
 // O menu é renderizado conforme o papel; o servidor revalida sempre (RLS).
 import { useEffect, useState, type ReactNode } from 'react'
@@ -14,6 +14,7 @@ const ITENS: Item[] = [
   { rota: '/pacientes/identificar', rotulo: 'Identificar paciente', papeis: 'todos' },
   { rota: '/admin', rotulo: 'Administração', papeis: ['owner', 'clinic_admin'] },
   { rota: '/admin/conexoes', rotulo: 'Conexões', papeis: ['owner', 'clinic_admin'] },
+  { rota: '/admin/canais', rotulo: 'Canais WhatsApp', papeis: ['owner', 'clinic_admin'] },
 ]
 
 export function AppShell({ papel, children }: { papel: Papel | null; children: ReactNode }) {

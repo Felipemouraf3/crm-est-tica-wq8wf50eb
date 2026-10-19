@@ -10,6 +10,7 @@ import ForgotPassword from './pages/ForgotPassword'
 import Inicio from './pages/Inicio'
 import AdminProtegido from './pages/AdminProtegido'
 import AdminConexoes from './pages/AdminConexoes'
+import AdminCanais from './pages/AdminCanais'
 import IdentificarPaciente from './pages/IdentificarPaciente'
 import SegundoFator from './pages/SegundoFator'
 import { RequireRole } from './components/guards'
@@ -36,6 +37,15 @@ const App = () => (
               element={
                 <RequireRole papeis={['owner', 'clinic_admin']} exigeMfa>
                   <AdminConexoes />
+                </RequireRole>
+              }
+            />
+            {/* P2-S03-T01: canais WhatsApp (owner/clinic_admin + AAL2) */}
+            <Route
+              path="/admin/canais"
+              element={
+                <RequireRole papeis={['owner', 'clinic_admin']} exigeMfa>
+                  <AdminCanais />
                 </RequireRole>
               }
             />
