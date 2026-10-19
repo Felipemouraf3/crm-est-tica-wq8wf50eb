@@ -9,7 +9,10 @@ import Index from './pages/Index'
 import ForgotPassword from './pages/ForgotPassword'
 import Inicio from './pages/Inicio'
 import AdminProtegido from './pages/AdminProtegido'
+import AdminConexoes from './pages/AdminConexoes'
+import IdentificarPaciente from './pages/IdentificarPaciente'
 import SegundoFator from './pages/SegundoFator'
+import { RequireRole } from './components/guards'
 import NotFound from './pages/NotFound'
 
 const App = () => (
@@ -27,6 +30,17 @@ const App = () => (
             <Route path="/dashboard" element={<Navigate to="/inicio" replace />} />
             <Route path="/segundo-fator" element={<SegundoFator />} />
             <Route path="/admin" element={<AdminProtegido />} />
+            {/* P2-S02-T03: cartão de saúde da conexão (owner/clinic_admin + AAL2) */}
+            <Route
+              path="/admin/conexoes"
+              element={
+                <RequireRole papeis={['owner', 'clinic_admin']} exigeMfa>
+                  <AdminConexoes />
+                </RequireRole>
+              }
+            />
+            {/* P2-S02-T03: tela de busca — todos os papéis com vínculo ativo */}
+            <Route path="/pacientes/identificar" element={<IdentificarPaciente />} />
           </Route>
           <Route path="*" element={<NotFound />} />
         </Routes>
