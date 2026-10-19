@@ -1,30 +1,36 @@
-// Edge Function search-expert-patient — P1-S05-T02 (repo: supabase/functions)
-// Fluxo: JWT do usuário → valida acesso (RPCs RLS) → normaliza E.164
-// → cache (TTL) → API Clínica Experts (módulo T01 em _shared/, fase 1 aceito)
-// → classifica zero/um/múltiplos (nunca escolhe múltiplos) → grava cache.
+// Edge Function search-expert-patient v2 — P2-S02-T02
+// Mudanças da v1 (P1-S05-T02):
+//   - busca em DUAS ETAPAS via _shared/providers/expert-search.ts
+//     (a: E.164 · b: últimos 8 dígitos com filtro de DDD → provavel)
+//   - contrato de saída da SPEC: { data: { result_class, phone_e164,
+//     candidates[{expert_patient_uuid,name,birth_masked,active}],
+//     linked_patient_uuid, cache_hit }, correlation_id }
+//   - cache grava candidatos mínimos (nunca dado sensível)
+// Mantém: JWT obrigatório, acesso por organização (RLS), cache TTL 1h,
+// erros sanitizados com correlation_id, falha não bloqueia conversa local.
 // @ts-nocheck
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { buscarPacientesPorTelefone } from '../_shared/clinic_experts_client.ts'
+import { buscarEmDuasEtapas } from '../_shared/providers/expert-search.ts'
+import { EXPERT_BASE_URL_DEFAULT } from '../_shared/providers/clinica-experts.ts'
 
-// ==================== Edge Function ====================
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Content-Type': 'application/json',
 }
 
+const resp = (status: number, corpo: unknown) =>
+  new Response(JSON.stringify(corpo), { status, headers: corsHeaders })
+
 Deno.serve(async (req: Request) => {
   const correlationId = crypto.randomUUID()
   try {
     if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
-    // 1. Autenticação: JWT do usuário (nunca anon)
+    // 1. JWT obrigatório
     const authHeader = req.headers.get('Authorization') ?? ''
     if (!authHeader.startsWith('Bearer ') || authHeader === 'Bearer ') {
-      return new Response(JSON.stringify({ erro: 'autenticacao', correlation_id: correlationId }), {
-        status: 401,
-        headers: corsHeaders,
-      })
+      return resp(401, { erro: 'autenticacao', correlation_id: correlationId })
     }
     const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? ''
     const userClient = createClient(SUPABASE_URL, Deno.env.get('SUPABASE_ANON_KEY') ?? '', {
@@ -32,76 +38,60 @@ Deno.serve(async (req: Request) => {
     })
     const { data: userData } = await userClient.auth.getUser()
     if (!userData?.user?.id) {
-      return new Response(JSON.stringify({ erro: 'autenticacao', correlation_id: correlationId }), {
-        status: 401,
-        headers: corsHeaders,
-      })
+      return resp(401, { erro: 'autenticacao', correlation_id: correlationId })
     }
 
-    // 2. Entrada: { clinic_id, phone, forcar_api? }
+    // 2. Entrada: { clinic_id, phone, force_refresh? }
     const body = await req.json().catch(() => ({}))
     const clinicId = body?.clinic_id
     const phoneRaw = body?.phone
-    const forcarApi = body?.forcar_api === true
+    const forceRefresh = body?.force_refresh === true || body?.forcar_api === true
     if (!clinicId || !phoneRaw) {
-      return new Response(
-        JSON.stringify({
-          erro: 'entrada',
-          mensagem: 'clinic_id e phone são obrigatórios',
-          correlation_id: correlationId,
-        }),
-        { status: 400, headers: corsHeaders },
-      )
+      return resp(400, {
+        erro: 'entrada',
+        mensagem: 'clinic_id e phone são obrigatórios',
+        correlation_id: correlationId,
+      })
     }
 
     // 3. Normalização E.164 server-side (RPC da migration)
-    const { data: normData, error: normErr } = await userClient.rpc('normalize_e164', {
+    const { data: phoneE164, error: normErr } = await userClient.rpc('normalize_e164', {
       p_raw: phoneRaw,
     })
-    if (normErr || !normData) {
-      return new Response(
-        JSON.stringify({
-          erro: 'entrada',
-          mensagem: 'Telefone inválido para E.164',
-          correlation_id: correlationId,
-        }),
-        { status: 400, headers: corsHeaders },
-      )
+    if (normErr || !phoneE164) {
+      return resp(400, {
+        erro: 'entrada',
+        mensagem: 'Telefone inválido para E.164',
+        correlation_id: correlationId,
+      })
     }
-    const phoneE164: string = normData
 
-    // 4. Acesso: membro ativo da organização da clínica (RLS decide)
+    // 4. Acesso: clínica ativa + membro da organização (RLS decide)
     const { data: clinicRow, error: clinicErr } = await userClient
       .from('clinics')
       .select('id, organization_id, status')
       .eq('id', clinicId)
       .maybeSingle()
     if (clinicErr || !clinicRow || clinicRow.status !== 'active') {
-      return new Response(
-        JSON.stringify({
-          erro: 'permissao',
-          mensagem: 'Clínica não encontrada ou inativa',
-          correlation_id: correlationId,
-        }),
-        { status: 403, headers: corsHeaders },
-      )
+      return resp(403, {
+        erro: 'permissao',
+        mensagem: 'Clínica não encontrada ou inativa',
+        correlation_id: correlationId,
+      })
     }
     const { data: membro, error: membroErr } = await userClient.rpc('is_org_member', {
       p_org: clinicRow.organization_id,
     })
     if (membroErr || membro !== true) {
-      return new Response(
-        JSON.stringify({
-          erro: 'permissao',
-          mensagem: 'Sem permissão nesta clínica',
-          correlation_id: correlationId,
-        }),
-        { status: 403, headers: corsHeaders },
-      )
+      return resp(403, {
+        erro: 'permissao',
+        mensagem: 'Sem permissão nesta clínica',
+        correlation_id: correlationId,
+      })
     }
 
     // 5. Cache (TTL): válido se não invalidado e dentro do prazo
-    if (!forcarApi) {
+    if (!forceRefresh) {
       const { data: cacheRow } = await userClient
         .from('expert_patients_cache')
         .select('payload, result_class, expires_at')
@@ -111,31 +101,21 @@ Deno.serve(async (req: Request) => {
         .gt('expires_at', new Date().toISOString())
         .maybeSingle()
       if (cacheRow) {
-        return new Response(
-          JSON.stringify({
-            origem: 'cache',
-            classificacao: cacheRow.result_class,
-            resultados: cacheRow.payload?.resultados ?? [],
-            valido_ate: cacheRow.expires_at,
-            correlation_id: correlationId,
-          }),
-          { headers: corsHeaders },
-        )
+        return resp(200, {
+          data: {
+            result_class: cacheRow.result_class,
+            phone_e164: phoneE164,
+            candidates: cacheRow.payload?.candidates ?? [],
+            linked_patient_uuid: cacheRow.payload?.linked_patient_uuid ?? null,
+            cache_hit: true,
+          },
+          correlation_id: correlationId,
+        })
       }
     }
 
-    // 6. Config: base URL (env) + token (Vault via service role)
-    const baseUrl = Deno.env.get('EXPERT_API_BASE_URL')
-    if (!baseUrl) {
-      return new Response(
-        JSON.stringify({
-          erro: 'api_nao_configurada',
-          mensagem: 'EXPERT_API_BASE_URL ausente',
-          correlation_id: correlationId,
-        }),
-        { status: 503, headers: corsHeaders },
-      )
-    }
+    // 6. Config: base URL (env; default do contrato) + token (Vault via service role)
+    const baseUrl = Deno.env.get('EXPERT_API_BASE_URL') ?? EXPERT_BASE_URL_DEFAULT
     const adminClient = createClient(SUPABASE_URL, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '')
     const { data: conn } = await adminClient
       .from('integration_connections')
@@ -155,55 +135,56 @@ Deno.serve(async (req: Request) => {
       token = sec?.secret ?? null
     }
     if (!token) {
-      return new Response(
-        JSON.stringify({
-          erro: 'credencial',
-          mensagem: 'Token da API não configurado (salve via /admin)',
-          correlation_id: correlationId,
-        }),
-        { status: 503, headers: corsHeaders },
-      )
+      return resp(503, {
+        erro: 'credencial',
+        mensagem: 'Token da API não configurado (salve via /admin)',
+        correlation_id: correlationId,
+      })
     }
 
-    // 7. Busca na API (módulo T01: timeout, rate limiter, retry, sanitização)
+    // 7. Busca em duas etapas (módulo T02; erros tipados do contrato T01)
     let busca
     try {
-      busca = await buscarPacientesPorTelefone(baseUrl, token, phoneE164, { correlationId })
+      busca = await buscarEmDuasEtapas(baseUrl, token, phoneE164, { correlationId })
     } catch (e) {
-      const tipo = e?.tipo ?? 'servico'
+      const code = e?.code ?? 'falha_transitoria'
       const statusMap: Record<string, number> = {
-        credencial: 503,
-        entrada: 400,
-        timeout: 504,
-        rede: 502,
-        servico: 502,
-        rate_limit_externo: 429,
+        credencial_invalida: 502,
+        bloqueio_de_borda: 502,
+        modulo_desabilitado: 503,
+        paciente_nao_encontrado: 404,
+        entrada_recusada: 400,
+        limite_externo: 503,
+        falha_transitoria: 502,
+        tempo_esgotado: 504,
+        falha_externa: 502,
       }
-      return new Response(
-        JSON.stringify({
-          erro: tipo,
-          mensagem: e.message,
-          correlation_id: e?.detalhe?.correlation_id ?? correlationId,
-          falha_nao_bloqueia: true,
-        }),
-        { status: statusMap[tipo] ?? 502, headers: corsHeaders },
-      )
+      return resp(statusMap[code] ?? 502, {
+        erro: code,
+        mensagem: e?.message ?? 'Falha na API externa',
+        correlation_id: e?.correlationId ?? correlationId,
+        falha_nao_bloqueia: true,
+      })
     }
 
-    // 8. Classificação zero/um/múltiplos — múltiplos NUNCA escolhidos
-    const resultados = busca.resultados
-    const classificacao =
-      resultados.length === 0 ? 'zero' : resultados.length === 1 ? 'um' : 'multiplos'
-
-    // 9. Grava cache (TTL 1h) — service role (dado derivado da busca)
+    // 8. Cache (TTL 1h) — só candidatos mínimos (uuid/name/birth_masked/active)
     const expiresAt = new Date(Date.now() + 3600 * 1000).toISOString()
+    const payload = {
+      candidates: busca.candidatos.map((c) => ({
+        expert_patient_uuid: c.expert_patient_uuid,
+        name: c.name,
+        birth_masked: c.birth_masked,
+        active: c.active,
+      })),
+      linked_patient_uuid: null,
+    }
     await adminClient.from('expert_patients_cache').upsert(
       {
         organization_id: clinicRow.organization_id,
         clinic_id: clinicId,
         phone_e164: phoneE164,
-        payload: { resultados },
-        result_class: classificacao,
+        payload,
+        result_class: busca.result_class,
         expires_at: expiresAt,
         invalidated: false,
         correlation_id: correlationId,
@@ -211,21 +192,18 @@ Deno.serve(async (req: Request) => {
       { onConflict: 'clinic_id,phone_e164' },
     )
 
-    return new Response(
-      JSON.stringify({
-        origem: 'api',
-        classificacao,
-        resultados,
-        valido_ate: expiresAt,
-        correlation_id: correlationId,
-        telemetria: busca.telemetria,
-      }),
-      { headers: corsHeaders },
-    )
-  } catch (e) {
-    return new Response(JSON.stringify({ erro: 'inesperado', correlation_id: correlationId }), {
-      status: 500,
-      headers: corsHeaders,
+    // 9. Contrato de saída da SPEC
+    return resp(200, {
+      data: {
+        result_class: busca.result_class,
+        phone_e164: phoneE164,
+        candidates: payload.candidates,
+        linked_patient_uuid: null,
+        cache_hit: false,
+      },
+      correlation_id: correlationId,
     })
+  } catch (e) {
+    return resp(500, { erro: 'inesperado', correlation_id: correlationId })
   }
 })

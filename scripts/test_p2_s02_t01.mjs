@@ -1,4 +1,4 @@
-// scripts/test_p2_s02_t01.mjs — P2-S02-T01 (runner v3)
+// scripts/test_p2_s02_t01.mjs — P2-S02-T01 (runner)
 // Matriz do contrato: classificação dos 4 formatos de erro + Cloudflare,
 // rateBudget (90/min + x-ratelimit-remaining), leitor mínimo e httpDeErro.
 // expertGet (integração com fetch) testado com guarda de 3s — o sandbox com
@@ -12,7 +12,7 @@ const watchdog = setTimeout(() => {
 }, 15_000)
 watchdog.unref?.()
 
-const mod = await import('../clinica-experts-v2.ts')
+const mod = await import('../supabase/functions/_shared/providers/clinica-experts.ts')
 const {
   classifyExpertError,
   rateBudget,
