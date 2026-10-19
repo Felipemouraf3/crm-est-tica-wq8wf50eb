@@ -144,8 +144,18 @@ describe('IdentificarPaciente — P2-S02-T03', () => {
       result_class: 'multiplos',
       phone_e164: '+5581988887777',
       candidates: [
-        { expert_patient_uuid: 'e1', name: 'Compartilhado A', birth_masked: '**/**/1980', active: true },
-        { expert_patient_uuid: 'e2', name: 'Compartilhado B', birth_masked: '**/**/1975', active: false },
+        {
+          expert_patient_uuid: 'e1',
+          name: 'Compartilhado A',
+          birth_masked: '**/**/1980',
+          active: true,
+        },
+        {
+          expert_patient_uuid: 'e2',
+          name: 'Compartilhado B',
+          birth_masked: '**/**/1975',
+          active: false,
+        },
       ],
       linked_patient_uuid: null,
       cache_hit: false,
@@ -169,7 +179,12 @@ describe('IdentificarPaciente — P2-S02-T03', () => {
       result_class: 'provavel',
       phone_e164: '+5581999990001',
       candidates: [
-        { expert_patient_uuid: 'e5', name: 'Cadastro Antigo', birth_masked: '**/**/1979', active: true },
+        {
+          expert_patient_uuid: 'e5',
+          name: 'Cadastro Antigo',
+          birth_masked: '**/**/1979',
+          active: true,
+        },
       ],
       linked_patient_uuid: null,
       cache_hit: false,
@@ -191,9 +206,7 @@ describe('IdentificarPaciente — P2-S02-T03', () => {
       cache_hit: false,
       correlation_id: 'corr-4',
     })
-    await waitFor(() =>
-      expect(screen.getByText(/Nenhum paciente com este telefone/)).toBeTruthy(),
-    )
+    await waitFor(() => expect(screen.getByText(/Nenhum paciente com este telefone/)).toBeTruthy())
     expect(screen.getByText(/Tratar como novo contato/)).toBeTruthy()
   })
 
@@ -263,5 +276,5 @@ describe('IdentificarPaciente — P2-S02-T03', () => {
     await waitFor(() =>
       expect(screen.getByText(/Seu papel nao permite confirmar vinculos/)).toBeTruthy(),
     )
-  }
+  })
 })

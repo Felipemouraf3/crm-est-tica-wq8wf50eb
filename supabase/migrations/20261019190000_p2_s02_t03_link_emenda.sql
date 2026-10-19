@@ -6,6 +6,8 @@
 --   confidence: manual = 1.0 · manual_provavel = 0.7.
 --   Idempotente (CREATE OR REPLACE); replay seguro.
 --   Runner: scripts/test_p2_s02_t03_emenda.mjs (12/12, PGlite).
+--   Nota: checagem de papel direto em memberships (has_clinic_role
+--   não existe no banco real — pré-condição removida).
 -- ============================================================
 
 CREATE OR REPLACE FUNCTION public.link_expert_patient(
@@ -34,8 +36,12 @@ BEGIN
 
   -- CRIAR vínculo: owner/clinic_admin/manager/sales/reception/post_sales
   -- da clínica (decisão humana registrada). viewer NÃO vincula.
-  IF NOT public.has_clinic_role(p_clinic_id,
-      ARRAY['owner','clinic_admin','manager','sales','reception','post_sales']) THEN
+  IF NOT EXISTS (
+    SELECT 1 FROM public.memberships m
+     WHERE m.clinic_id = p_clinic_id AND m.user_id = auth.uid()
+       AND m.active = true
+       AND m.role IN ('owner','clinic_admin','manager','sales','reception','post_sales')
+  ) THEN
     RAISE EXCEPTION 'Seu papel nao permite confirmar vinculos nesta clinica' USING ERRCODE = '42501';
   END IF;
 
@@ -89,7 +95,11 @@ BEGIN
   IF v_org IS NULL THEN
     RAISE EXCEPTION 'Clinica nao encontrada ou inativa' USING ERRCODE = 'P0004';
   END IF;
-  IF NOT public.has_clinic_role(p_clinic_id, ARRAY['owner','clinic_admin']) THEN
+  IF NOT EXISTS (
+    SELECT 1 FROM public.memberships m
+     WHERE m.clinic_id = p_clinic_id AND m.user_id = auth.uid()
+       AND m.active = true AND m.role IN ('owner','clinic_admin')
+  ) THEN
     RAISE EXCEPTION 'Somente owner/clinic_admin podem desfazer vinculos' USING ERRCODE = '42501';
   END IF;
 
@@ -116,9 +126,5 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
                  WHERE n.nspname='public' AND p.proname='unlink_expert_patient') THEN
     RAISE EXCEPTION 'RPC unlink_expert_patient não criada';
-  END IF;
-  IF NOT EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
-                 WHERE n.nspname='public' AND p.proname='has_clinic_role') THEN
-    RAISE EXCEPTION 'Função has_clinic_role não existe (pré-condição da emenda)';
   END IF;
 END $$;
