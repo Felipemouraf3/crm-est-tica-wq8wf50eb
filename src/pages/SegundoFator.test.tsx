@@ -1,9 +1,8 @@
 // src/pages/SegundoFator.test.tsx — P2-S01 (tela de segundo fator, 2026-10-18)
 // Testes de tela: enroll gera QR e verifica código; challenge pede código;
 // erro amigável em código inválido; sucesso mostra continuar.
-// Lições: mockar pelo MESMO caminho que o componente importa (@/lib/...);
-// chain do from() precisa ser thenable (await em qualquer ponto resolve);
-// não usar vi.clearAllMocks() quando o mock é configurado no beforeEach.
+// 2026-10-20: componente migrou para REST direto (GoTrue snake_case) —
+// testes agora mockam o fetch global (mfaRest usa fetch), não o mfa do sdk.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -11,22 +10,15 @@ import { MemoryRouter } from 'react-router-dom'
 
 const W = { timeout: 3000, interval: 50 }
 
-vi.mock('@/lib/supabase/client', () => {
-  const mfa = {
-    listFactors: vi.fn(),
-    enroll: vi.fn(),
-    unenroll: vi.fn(),
-    challenge: vi.fn(),
-    verify: vi.fn(),
-    getAuthenticatorAssuranceLevel: vi.fn(async () => ({ data: { currentLevel: 'aal1' } })),
-  }
-  return {
-    supabase: {
-      auth: { getSession: vi.fn(), mfa },
-      from: vi.fn(),
+vi.mock('@/lib/supabase/client', () => ({
+  supabase: {
+    auth: {
+      getSession: vi.fn(),
+      getAuthenticatorAssuranceLevel: vi.fn(async () => ({ data: { currentLevel: 'aal1' } })),
     },
-  }
-})
+    from: vi.fn(),
+  },
+}))
 
 // mock do AppShell para não puxar ClinicSelector
 vi.mock('@/components/app-shell', () => ({
@@ -37,14 +29,30 @@ import { supabase } from '@/lib/supabase/client'
 import SegundoFator from './SegundoFator'
 
 const getSession = supabase.auth.getSession as ReturnType<typeof vi.fn>
-const mfa = (supabase.auth as unknown as { mfa: Record<string, ReturnType<typeof vi.fn>> }).mfa
 const from = supabase.from as ReturnType<typeof vi.fn>
+
+// mock do fetch global: roteia /auth/v1/* para mfaFetch
+const mfaFetch = vi.fn()
+const realFetch = globalThis.fetch
+function instalarFetch() {
+  globalThis.fetch = vi.fn(async (input: unknown, init?: unknown) => {
+    const url = typeof input === 'string' ? input : (input as URL).toString()
+    if (url.includes('/auth/v1/')) return mfaFetch(url, init)
+    return realFetch(input as never, init as never)
+  }) as unknown as typeof fetch
+}
+function respostaMfa(corpo: unknown, status = 200) {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    json: async () => corpo,
+  }
+}
 
 function mockFrom(resposta: { data: unknown; error: unknown }) {
   from.mockImplementation(() => {
     const chain: any = {}
     const resolve = () => Promise.resolve(resposta)
-    // terminal inteligente: await em qualquer ponto da chain resolve a resposta
     chain.select = vi.fn(() => chain)
     chain.eq = vi.fn(() => chain)
     chain.limit = vi.fn(() => chain)
@@ -57,18 +65,21 @@ function mockFrom(resposta: { data: unknown; error: unknown }) {
 }
 
 beforeEach(() => {
-  getSession.mockResolvedValue({ data: { session: { user: { id: 'u1' } } } })
+  getSession.mockResolvedValue({
+    data: { session: { user: { id: 'u1' }, access_token: 'jwt-teste' } },
+  })
   mockFrom({ data: [{ role: 'owner', active: true }], error: null })
-  mfa.listFactors.mockReset()
-  mfa.enroll.mockReset()
-  mfa.unenroll.mockReset()
-  mfa.challenge.mockReset()
-  mfa.verify.mockReset()
+  instalarFetch()
+  mfaFetch.mockReset()
 })
 
 describe('SegundoFator', () => {
   it('sem fator → botão de gerar QR', async () => {
-    mfa.listFactors.mockResolvedValue({ data: { all: [] }, error: null })
+    mfaFetch.mockImplementation((url: string) =>
+      url.endsWith('/auth/v1/factors')
+        ? Promise.resolve(respostaMfa({ all: [] }))
+        : Promise.resolve(respostaMfa({}, 404)),
+    )
     render(
       <MemoryRouter initialEntries={['/segundo-fator']}>
         <SegundoFator />
@@ -78,10 +89,18 @@ describe('SegundoFator', () => {
   })
 
   it('enroll → QR + chave manual + campo de código', async () => {
-    mfa.listFactors.mockResolvedValue({ data: { all: [] }, error: null })
-    mfa.enroll.mockResolvedValue({
-      data: { id: 'f1', totp: { qr_code: 'https://qr.example/x', secret: 'ABCD1234EFGH5678' } },
-      error: null,
+    mfaFetch.mockImplementation((url: string, init?: { method?: string }) => {
+      if (url.endsWith('/auth/v1/factors') && (init?.method ?? 'GET') === 'GET')
+        return Promise.resolve(respostaMfa({ all: [] }))
+      if (url.endsWith('/auth/v1/factors') && init?.method === 'POST')
+        return Promise.resolve(
+          respostaMfa({
+            id: 'f1',
+            type: 'totp',
+            totp: { qr_code: 'https://qr.example/x', secret: 'ABCD1234EFGH5678' },
+          }),
+        )
+      return Promise.resolve(respostaMfa({}, 404))
     })
     const user = userEvent.setup()
     render(
@@ -96,12 +115,21 @@ describe('SegundoFator', () => {
   })
 
   it('código correto no enroll → sucesso + continuar', async () => {
-    mfa.listFactors.mockResolvedValue({ data: { all: [] }, error: null })
-    mfa.enroll.mockResolvedValue({
-      data: { id: 'f1', totp: { qr_code: 'https://qr.example/x', secret: 'ABCD1234' } },
-      error: null,
+    mfaFetch.mockImplementation((url: string, init?: { method?: string; body?: string }) => {
+      if (url.endsWith('/auth/v1/factors') && (init?.method ?? 'GET') === 'GET')
+        return Promise.resolve(respostaMfa({ all: [] }))
+      if (url.endsWith('/auth/v1/factors') && init?.method === 'POST')
+        return Promise.resolve(
+          respostaMfa({
+            id: 'f1',
+            type: 'totp',
+            totp: { qr_code: 'https://qr.example/x', secret: 'ABCD1234' },
+          }),
+        )
+      if (url.endsWith('/factors/f1/verify') && init?.method === 'POST')
+        return Promise.resolve(respostaMfa({}))
+      return Promise.resolve(respostaMfa({}, 404))
     })
-    mfa.verify.mockResolvedValue({ data: {}, error: null })
     const user = userEvent.setup()
     render(
       <MemoryRouter initialEntries={['/segundo-fator']}>
@@ -120,12 +148,26 @@ describe('SegundoFator', () => {
   })
 
   it('código inválido → mensagem amigável', async () => {
-    mfa.listFactors.mockResolvedValue({ data: { all: [] }, error: null })
-    mfa.enroll.mockResolvedValue({
-      data: { id: 'f1', totp: { qr_code: 'https://qr.example/x', secret: 'ABCD1234' } },
-      error: null,
+    mfaFetch.mockImplementation((url: string, init?: { method?: string }) => {
+      if (url.endsWith('/auth/v1/factors') && (init?.method ?? 'GET') === 'GET')
+        return Promise.resolve(respostaMfa({ all: [] }))
+      if (url.endsWith('/auth/v1/factors') && init?.method === 'POST')
+        return Promise.resolve(
+          respostaMfa({
+            id: 'f1',
+            type: 'totp',
+            totp: { qr_code: 'https://qr.example/x', secret: 'ABCD1234' },
+          }),
+        )
+      if (url.endsWith('/factors/f1/verify') && init?.method === 'POST')
+        return Promise.resolve(
+          respostaMfa(
+            { code: 400, error_code: 'totp_verified', msg: 'Invalid TOTP code detected' },
+            400,
+          ),
+        )
+      return Promise.resolve(respostaMfa({}, 404))
     })
-    mfa.verify.mockResolvedValue({ data: null, error: { message: 'Invalid TOTP code detected' } })
     const user = userEvent.setup()
     render(
       <MemoryRouter initialEntries={['/segundo-fator']}>
@@ -141,14 +183,15 @@ describe('SegundoFator', () => {
   })
 
   it('fator já verificado → challenge direto', async () => {
-    mfa.listFactors.mockResolvedValue({
-      data: {
-        all: [{ id: 'f1', type: 'totp', status: 'verified', friendly_name: 'CRM Estética' }],
-      },
-      error: null,
+    mfaFetch.mockImplementation((url: string) => {
+      if (url.endsWith('/auth/v1/factors'))
+        return Promise.resolve(
+          respostaMfa({
+            all: [{ id: 'f1', type: 'totp', status: 'verified', friendly_name: 'CRM Estética' }],
+          }),
+        )
+      return Promise.resolve(respostaMfa({}, 404))
     })
-    mfa.challenge.mockResolvedValue({ data: { id: 'c1' }, error: null })
-    mfa.verify.mockResolvedValue({ data: {}, error: null })
     render(
       <MemoryRouter initialEntries={['/segundo-fator']}>
         <SegundoFator />

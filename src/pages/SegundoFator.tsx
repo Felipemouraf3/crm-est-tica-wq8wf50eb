@@ -1,10 +1,11 @@
 // src/pages/SegundoFator.tsx — P2-S01 (tela de segundo fator, 2026-10-18)
-// Fluxo completo de TOTP no app (supabase-js v2):
-// 1. sem fator  → enroll: mfa.enroll({ factorType: 'totp' }) → QR (totp_url) →
-//    usuário escaneia no autenticador → verify({ code }) → fator verificado.
-// 2. com fator  → challenge: mfa.challenge({ factorId }) → verify({ code }).
-// Após sucesso: volta para o destino original (?next=) ou /admin.
-// Erros amigáveis (rate limit, código inválido, já usado). Sem `as any`.
+// Fluxo completo de TOTP no app:
+// 1. sem fator  → enroll (POST /auth/v1/factors, snake_case) → QR →
+//    usuário escaneia no autenticador → verify → fator verificado.
+// 2. com fator  → challenge → verify.
+// 2026-10-20: supabase-js desta versão manda factorType camelCase e o
+// GoTrue do projeto recusa com validation_failed — migrado para REST
+// direto no GoTrue (snake_case), provado ao vivo (enroll 200 com QR).
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '@/lib/supabase/client'
@@ -29,10 +30,29 @@ type Etapa =
   | 'sucesso'
   | 'erro'
 
-function qrDataUrl(totpUrl: string): string {
-  // QR gerado via serviço de imagem (sem dependências no bundle):
-  // renderiza o conteúdo do totp_url.
-  return `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(totpUrl)}`
+// REST direto no GoTrue (snake_case).
+async function mfaRest(
+  metodo: 'GET' | 'POST' | 'DELETE',
+  caminho: string,
+  corpo?: Record<string, unknown>,
+): Promise<{ ok: boolean; data?: Record<string, unknown>; erro?: string }> {
+  const { data: sess } = await supabase.auth.getSession()
+  const jwt = sess.session?.access_token
+  if (!jwt) return { ok: false, erro: 'Sua sessão expirou. Faça login novamente.' }
+  const resp = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/auth/v1/${caminho}`, {
+    method: metodo,
+    headers: {
+      apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string,
+      Authorization: `Bearer ${jwt}`,
+      'Content-Type': 'application/json',
+    },
+    body: metodo === 'GET' || metodo === 'DELETE' ? undefined : JSON.stringify(corpo ?? {}),
+  })
+  const data = (await resp.json().catch(() => ({}))) as Record<string, unknown>
+  if (!resp.ok) {
+    return { ok: false, erro: String((data as { msg?: string }).msg ?? 'Erro de autenticação') }
+  }
+  return { ok: true, data }
 }
 
 function SegundoFator() {
@@ -68,14 +88,14 @@ function SegundoFator() {
       if (!vivo) return
       setPapel((mem?.[0]?.role ?? null) as Papel | null)
 
-      const { data, error } = await supabase.auth.mfa.listFactors()
+      const lista = await mfaRest('GET', 'factors')
       if (!vivo) return
-      if (error) {
-        setErro(getFriendlyAuthErrorMessage(error))
+      if (!lista.ok) {
+        setErro(getFriendlyAuthErrorMessage({ message: lista.erro ?? 'Falha ao listar fatores' }))
         setEtapa('erro')
         return
       }
-      const totp = (data?.all ?? []).filter((f) => f.type === 'totp') as Fator[]
+      const totp = ((lista.data?.all ?? []) as Fator[]).filter((f) => f.type === 'totp')
       setFatores(totp)
       const verificado = totp.find((f) => f.status === 'verified')
       if (verificado) {
@@ -103,20 +123,20 @@ function SegundoFator() {
     setOcupado(true)
     setErro(null)
     try {
-      // se existe fator pendente de outro attempt, desinscreve para não acumular
+      // fator pendente de outro attempt: desinscreve para não acumular
       const pendente = fatores.find((f) => f.status !== 'verified')
       if (pendente) {
-        await supabase.auth.mfa.unenroll({ factorId: pendente.id })
+        await mfaRest('DELETE', `factors/${pendente.id}`)
       }
-      const { data, error } = await supabase.auth.mfa.enroll({
-        factorType: 'totp',
-        friendlyName: 'CRM Estética',
+      const r = await mfaRest('POST', 'factors', {
+        factor_type: 'totp',
+        friendly_name: 'CRM Estética',
       })
-      if (error) throw error
-      const totp = data?.totp
+      if (!r.ok) throw { message: r.erro ?? 'Falha ao gerar QR' }
+      const totp = r.data?.totp as { qr_code?: string; secret?: string } | undefined
       setQrUrl(totp?.qr_code ?? null)
       setSegredo(totp?.secret ?? null)
-      setFatorId(data?.id ?? null)
+      setFatorId(String(r.data?.id ?? ''))
       setEtapa('aguardando_codigo')
     } catch (e) {
       setErro(getFriendlyAuthErrorMessage(e))
@@ -134,22 +154,17 @@ function SegundoFator() {
     setErro(null)
     try {
       if (etapa === 'challenge') {
-        const { data, error } = await supabase.auth.mfa.challenge({ factorId: fatorId })
-        if (error) throw error
-        const { error: vErr } = await supabase.auth.mfa.verify({
-          factorId: fatorId,
-          challengeId: data.id,
+        const ch = await mfaRest('POST', `factors/${fatorId}/challenge`, {})
+        if (!ch.ok) throw { message: ch.erro ?? 'Falha no challenge' }
+        const v = await mfaRest('POST', `factors/${fatorId}/verify`, {
+          challenge_id: ch.data?.id,
           code: codigo.trim(),
         })
-        if (vErr) throw vErr
+        if (!v.ok) throw { message: v.erro ?? 'Código inválido' }
       } else {
         // enroll: verify direto com o fator recém-criado
-        const { error } = await supabase.auth.mfa.verify({
-          factorId: fatorId,
-          challengeId: undefined,
-          code: codigo.trim(),
-        })
-        if (error) throw error
+        const v = await mfaRest('POST', `factors/${fatorId}/verify`, { code: codigo.trim() })
+        if (!v.ok) throw { message: v.erro ?? 'Código inválido' }
       }
       setEtapa('sucesso')
     } catch (e) {
