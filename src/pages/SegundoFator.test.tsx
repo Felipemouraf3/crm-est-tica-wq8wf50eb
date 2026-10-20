@@ -1,8 +1,9 @@
 // src/pages/SegundoFator.test.tsx — P2-S01 (tela de segundo fator, 2026-10-18)
 // Testes de tela: enroll gera QR e verifica código; challenge pede código;
 // erro amigável em código inválido; sucesso mostra continuar.
-// 2026-10-20: componente migrou para REST direto (GoTrue snake_case) —
-// testes agora mockam o fetch global (mfaRest usa fetch), não o mfa do sdk.
+// 2026-10-20: componente em REST direto (GoTrue snake_case) — testes mockam o
+// fetch global; listagem via GET /user; verify sempre com challenge_id;
+// qr_code chega como SVG cru e vira data-URL.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -76,8 +77,8 @@ beforeEach(() => {
 describe('SegundoFator', () => {
   it('sem fator → botão de gerar QR', async () => {
     mfaFetch.mockImplementation((url: string) =>
-      url.endsWith('/auth/v1/factors')
-        ? Promise.resolve(respostaMfa({ all: [] }))
+      url.endsWith('/auth/v1/user')
+        ? Promise.resolve(respostaMfa({ factors: [] }))
         : Promise.resolve(respostaMfa({}, 404)),
     )
     render(
@@ -88,16 +89,18 @@ describe('SegundoFator', () => {
     await waitFor(() => expect(screen.getByText('Gerar código QR')).toBeTruthy(), W)
   })
 
-  it('enroll → QR + chave manual + campo de código', async () => {
+  it('enroll → QR (data-URL SVG) + chave manual + campo de código', async () => {
     mfaFetch.mockImplementation((url: string, init?: { method?: string }) => {
-      if (url.endsWith('/auth/v1/factors') && (init?.method ?? 'GET') === 'GET')
-        return Promise.resolve(respostaMfa({ all: [] }))
+      if (url.endsWith('/auth/v1/user')) return Promise.resolve(respostaMfa({ factors: [] }))
       if (url.endsWith('/auth/v1/factors') && init?.method === 'POST')
         return Promise.resolve(
           respostaMfa({
             id: 'f1',
             type: 'totp',
-            totp: { qr_code: 'https://qr.example/x', secret: 'ABCD1234EFGH5678' },
+            totp: {
+              qr_code: '<svg xmlns="http://www.w3.org/2000/svg"/>',
+              secret: 'ABCD1234EFGH5678',
+            },
           }),
         )
       return Promise.resolve(respostaMfa({}, 404))
@@ -110,24 +113,27 @@ describe('SegundoFator', () => {
     )
     await waitFor(() => user.click(screen.getByText('Gerar código QR')), W)
     await waitFor(() => expect(screen.getByAltText('QR do segundo fator')).toBeTruthy(), W)
+    const img = screen.getByAltText('QR do segundo fator') as HTMLImageElement
+    expect(img.src.startsWith('data:image/svg+xml')).toBeTruthy()
     expect(screen.getByText(/Chave manual: ABCD1234EFGH5678/)).toBeTruthy()
     expect(screen.getByLabelText('Código do autenticador')).toBeTruthy()
   })
 
-  it('código correto no enroll → sucesso + continuar', async () => {
+  it('código correto no enroll → challenge + verify com challenge_id → sucesso', async () => {
     mfaFetch.mockImplementation((url: string, init?: { method?: string; body?: string }) => {
-      if (url.endsWith('/auth/v1/factors') && (init?.method ?? 'GET') === 'GET')
-        return Promise.resolve(respostaMfa({ all: [] }))
+      if (url.endsWith('/auth/v1/user')) return Promise.resolve(respostaMfa({ factors: [] }))
       if (url.endsWith('/auth/v1/factors') && init?.method === 'POST')
         return Promise.resolve(
-          respostaMfa({
-            id: 'f1',
-            type: 'totp',
-            totp: { qr_code: 'https://qr.example/x', secret: 'ABCD1234' },
-          }),
+          respostaMfa({ id: 'f1', type: 'totp', totp: { qr_code: '<svg/>', secret: 'ABCD1234' } }),
         )
-      if (url.endsWith('/factors/f1/verify') && init?.method === 'POST')
-        return Promise.resolve(respostaMfa({}))
+      if (url.endsWith('/factors/f1/challenge') && init?.method === 'POST')
+        return Promise.resolve(respostaMfa({ id: 'c1' }))
+      if (url.endsWith('/factors/f1/verify') && init?.method === 'POST') {
+        const corpo = JSON.parse((init?.body as string) || '{}')
+        return corpo.challenge_id === 'c1'
+          ? Promise.resolve(respostaMfa({}))
+          : Promise.resolve(respostaMfa({ msg: 'challenge obrigatório' }, 422))
+      }
       return Promise.resolve(respostaMfa({}, 404))
     })
     const user = userEvent.setup()
@@ -148,17 +154,14 @@ describe('SegundoFator', () => {
   })
 
   it('código inválido → mensagem amigável', async () => {
-    mfaFetch.mockImplementation((url: string, init?: { method?: string }) => {
-      if (url.endsWith('/auth/v1/factors') && (init?.method ?? 'GET') === 'GET')
-        return Promise.resolve(respostaMfa({ all: [] }))
+    mfaFetch.mockImplementation((url: string, init?: { method?: string; body?: string }) => {
+      if (url.endsWith('/auth/v1/user')) return Promise.resolve(respostaMfa({ factors: [] }))
       if (url.endsWith('/auth/v1/factors') && init?.method === 'POST')
         return Promise.resolve(
-          respostaMfa({
-            id: 'f1',
-            type: 'totp',
-            totp: { qr_code: 'https://qr.example/x', secret: 'ABCD1234' },
-          }),
+          respostaMfa({ id: 'f1', type: 'totp', totp: { qr_code: '<svg/>', secret: 'ABCD1234' } }),
         )
+      if (url.endsWith('/factors/f1/challenge') && init?.method === 'POST')
+        return Promise.resolve(respostaMfa({ id: 'c1' }))
       if (url.endsWith('/factors/f1/verify') && init?.method === 'POST')
         return Promise.resolve(
           respostaMfa(
@@ -184,10 +187,12 @@ describe('SegundoFator', () => {
 
   it('fator já verificado → challenge direto', async () => {
     mfaFetch.mockImplementation((url: string) => {
-      if (url.endsWith('/auth/v1/factors'))
+      if (url.endsWith('/auth/v1/user'))
         return Promise.resolve(
           respostaMfa({
-            all: [{ id: 'f1', type: 'totp', status: 'verified', friendly_name: 'CRM Estética' }],
+            factors: [
+              { id: 'f1', type: 'totp', status: 'verified', friendly_name: 'CRM Estética' },
+            ],
           }),
         )
       return Promise.resolve(respostaMfa({}, 404))

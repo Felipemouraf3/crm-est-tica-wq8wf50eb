@@ -1,11 +1,14 @@
 // src/pages/SegundoFator.tsx — P2-S01 (tela de segundo fator, 2026-10-18)
 // Fluxo completo de TOTP no app:
 // 1. sem fator  → enroll (POST /auth/v1/factors, snake_case) → QR →
-//    usuário escaneia no autenticador → verify → fator verificado.
+//    usuário escaneia no autenticador → challenge → verify → fator verificado.
 // 2. com fator  → challenge → verify.
-// 2026-10-20: supabase-js desta versão manda factorType camelCase e o
-// GoTrue do projeto recusa com validation_failed — migrado para REST
-// direto no GoTrue (snake_case), provado ao vivo (enroll 200 com QR).
+// 2026-10-20: migrado para REST direto no GoTrue (snake_case). Particularidades
+// deste GoTrue, todas provadas ao vivo no navegador:
+// a) supabase-js manda factorType camelCase → GoTrue recusa com validation_failed;
+// b) GET /factors devolve 405 — listar fatores via GET /user (campo factors);
+// c) verify exige challenge_id SEMPRE (mesmo no enroll: enroll → challenge → verify);
+// d) qr_code vem como SVG cru → converter em data-URL para o <img>.
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '@/lib/supabase/client'
@@ -88,14 +91,15 @@ function SegundoFator() {
       if (!vivo) return
       setPapel((mem?.[0]?.role ?? null) as Papel | null)
 
-      const lista = await mfaRest('GET', 'factors')
+      // neste GoTrue, GET /factors devolve 405 — a listagem vem no GET /user
+      const lista = await mfaRest('GET', 'user')
       if (!vivo) return
       if (!lista.ok) {
         setErro(getFriendlyAuthErrorMessage({ message: lista.erro ?? 'Falha ao listar fatores' }))
         setEtapa('erro')
         return
       }
-      const totp = ((lista.data?.all ?? []) as Fator[]).filter((f) => f.type === 'totp')
+      const totp = ((lista.data?.factors ?? []) as Fator[]).filter((f) => f.type === 'totp')
       setFatores(totp)
       const verificado = totp.find((f) => f.status === 'verified')
       if (verificado) {
@@ -134,7 +138,8 @@ function SegundoFator() {
       })
       if (!r.ok) throw { message: r.erro ?? 'Falha ao gerar QR' }
       const totp = r.data?.totp as { qr_code?: string; secret?: string } | undefined
-      setQrUrl(totp?.qr_code ?? null)
+      // qr_code chega como SVG cru — virar data-URL para o <img> renderizar
+      setQrUrl(totp?.qr_code ? `data:image/svg+xml;utf8,${encodeURIComponent(totp.qr_code)}` : null)
       setSegredo(totp?.secret ?? null)
       setFatorId(String(r.data?.id ?? ''))
       setEtapa('aguardando_codigo')
@@ -153,19 +158,14 @@ function SegundoFator() {
     setOcupado(true)
     setErro(null)
     try {
-      if (etapa === 'challenge') {
-        const ch = await mfaRest('POST', `factors/${fatorId}/challenge`, {})
-        if (!ch.ok) throw { message: ch.erro ?? 'Falha no challenge' }
-        const v = await mfaRest('POST', `factors/${fatorId}/verify`, {
-          challenge_id: ch.data?.id,
-          code: codigo.trim(),
-        })
-        if (!v.ok) throw { message: v.erro ?? 'Código inválido' }
-      } else {
-        // enroll: verify direto com o fator recém-criado
-        const v = await mfaRest('POST', `factors/${fatorId}/verify`, { code: codigo.trim() })
-        if (!v.ok) throw { message: v.erro ?? 'Código inválido' }
-      }
+      // neste GoTrue, verify SEMPRE exige challenge_id (inclusive no enroll)
+      const ch = await mfaRest('POST', `factors/${fatorId}/challenge`, {})
+      if (!ch.ok) throw { message: ch.erro ?? 'Falha no challenge' }
+      const v = await mfaRest('POST', `factors/${fatorId}/verify`, {
+        challenge_id: ch.data?.id,
+        code: codigo.trim(),
+      })
+      if (!v.ok) throw { message: v.erro ?? 'Código inválido' }
       setEtapa('sucesso')
     } catch (e) {
       setErro(getFriendlyAuthErrorMessage(e))
