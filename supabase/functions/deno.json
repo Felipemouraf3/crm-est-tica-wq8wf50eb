@@ -1,6 +1,10 @@
 {
   "_versions": {
-    "admin-invite-user": 5,
-    "search-expert-patient": 4
+    "admin-invite-user": 6,
+    "search-expert-patient": 5,
+    "enqueue-outbound-message": 1,
+    "process-inbound-event": 1,
+    "send-whatsapp-message": 1,
+    "webhook-whatsapp-meta": 1
   }
 }
