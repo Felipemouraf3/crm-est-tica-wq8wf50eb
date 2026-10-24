@@ -310,15 +310,13 @@ async function moverParaDeadLetter(
     attempts,
     correlation_hint: correlationId,
   })
-  await admin
-    .schema('pgmq')
-    .rpc('send', {
-      queue_name: 'dead_letter',
-      msg: {
-        source_queue: fila,
-        ref_id: refId,
-        error_code: errorCode,
-        correlation_id: correlationId,
-      },
-    })
+  await admin.schema('pgmq').rpc('send', {
+    queue_name: 'dead_letter',
+    msg: {
+      source_queue: fila,
+      ref_id: refId,
+      error_code: errorCode,
+      correlation_id: correlationId,
+    },
+  })
 }
