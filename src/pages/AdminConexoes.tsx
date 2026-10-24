@@ -3,6 +3,8 @@
 // não configurada), último teste, limite restante, "Testar conexão" (leitura
 // GET /rooms?per_page=1 via RPC admin_test_connection) e "Trocar token"
 // (RPC admin_save_integration_secret — o valor nunca volta para a tela).
+// 2026-10-24: a RPC admin_test_connection grava/devolve health_status 'ok'
+// (não 'healthy') — tela aceita ambos, senão o teste saudável aparece como erro.
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase/client'
 import { useToast } from '@/hooks/use-toast'
@@ -104,7 +106,8 @@ export default function AdminConexoes() {
       if (error) throw error
       const r = data?.[0]
       const diag = (r?.diagnostico ?? {}) as Record<string, unknown>
-      const saudavel = r?.health_status === 'healthy'
+      // a RPC grava/devolve 'ok' (e versões antigas 'healthy') — aceitar ambos
+      const saudavel = r?.health_status === 'healthy' || r?.health_status === 'ok'
       const limite = diag?.rate_limit_remaining
       setDiagnostico(
         typeof limite === 'number' ? `Limite restante no último teste: ${limite}` : null,
@@ -158,10 +161,11 @@ export default function AdminConexoes() {
     }
   }
 
+  const saudavelCartao = conexao?.health_status === 'healthy' || conexao?.health_status === 'ok'
   const situacao =
     !conexao || conexao.health_status === 'not_configured'
       ? { rotulo: 'Não configurada', cor: 'bg-gray-100 text-gray-700' }
-      : conexao.health_status === 'healthy'
+      : saudavelCartao
         ? { rotulo: 'Saudável', cor: 'bg-green-100 text-green-800' }
         : { rotulo: 'Com erro', cor: 'bg-red-100 text-red-800' }
 
