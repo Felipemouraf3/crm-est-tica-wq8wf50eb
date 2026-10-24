@@ -2,8 +2,8 @@
 // Testes de tela: enroll gera QR e verifica código; challenge pede código;
 // erro amigável em código inválido; sucesso mostra continuar.
 // 2026-10-20: componente em REST direto (GoTrue snake_case) — testes mockam o
-// fetch global; listagem via GET /user; verify sempre com challenge_id;
-// qr_code chega como SVG cru e vira data-URL.
+// fetch global; listagem via GET /user com factor_type (formato real do GoTrue);
+// verify sempre com challenge_id; qr_code chega como SVG cru e vira data-URL.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -185,13 +185,13 @@ describe('SegundoFator', () => {
     expect(screen.getByText(/Código inválido ou expirado/)).toBeTruthy()
   })
 
-  it('fator já verificado → challenge direto', async () => {
+  it('fator já verificado (factor_type, formato real do GoTrue) → challenge direto', async () => {
     mfaFetch.mockImplementation((url: string) => {
       if (url.endsWith('/auth/v1/user'))
         return Promise.resolve(
           respostaMfa({
             factors: [
-              { id: 'f1', type: 'totp', status: 'verified', friendly_name: 'CRM Estética' },
+              { id: 'f1', factor_type: 'totp', status: 'verified', friendly_name: 'CRM Estética' },
             ],
           }),
         )

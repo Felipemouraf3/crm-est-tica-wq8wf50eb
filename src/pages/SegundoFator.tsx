@@ -8,7 +8,8 @@
 // a) supabase-js manda factorType camelCase → GoTrue recusa com validation_failed;
 // b) GET /factors devolve 405 — listar fatores via GET /user (campo factors);
 // c) verify exige challenge_id SEMPRE (mesmo no enroll: enroll → challenge → verify);
-// d) qr_code vem como SVG cru → converter em data-URL para o <img>.
+// d) qr_code vem como SVG cru → converter em data-URL para o <img>;
+// e) GET /user retorna os fatores com factor_type (não type) — filtro aceita ambos.
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '@/lib/supabase/client'
@@ -20,7 +21,8 @@ import type { Papel } from '@/lib/supabase/types'
 type Fator = {
   id: string
   friendly_name?: string | null
-  type: string
+  type?: string
+  factor_type?: string // GET /user deste GoTrue usa factor_type (não type)
   status: string
 }
 
@@ -99,7 +101,9 @@ function SegundoFator() {
         setEtapa('erro')
         return
       }
-      const totp = ((lista.data?.factors ?? []) as Fator[]).filter((f) => f.type === 'totp')
+      const totp = ((lista.data?.factors ?? []) as Fator[]).filter(
+        (f) => f.type === 'totp' || (f as { factor_type?: string }).factor_type === 'totp',
+      )
       setFatores(totp)
       const verificado = totp.find((f) => f.status === 'verified')
       if (verificado) {
