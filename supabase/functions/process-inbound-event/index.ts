@@ -1,7 +1,8 @@
-// Edge Function process-inbound-event v1 — P2-S03-T02
+// Edge Function process-inbound-event v2 — P2-S03-T02 + T03
 // Consumidor da fila inbound_events (acionado por pg_cron a cada 10s).
 // Nesta SPEC: marca o recibo como processado (status accepted já gravado no
 // webhook) e atualiza last_inbound_at. A P2-S04 completa (conversas/tickets).
+// v2 (T03): recibo buscado pelo provider do envelope (meta_cloud | z_api).
 // Proteção: chamada interna com INTERNAL_JOB_SECRET (header x-internal-job).
 // @ts-nocheck
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
@@ -41,7 +42,7 @@ Deno.serve(async (req: Request) => {
         const { data: recibo } = await admin
           .from('webhook_receipts')
           .select('id, status')
-          .eq('provider', 'meta_cloud')
+          .eq('provider', typeof msg.provider === 'string' ? msg.provider : 'meta_cloud')
           .eq('external_event_id', externalEventId)
           .maybeSingle()
         if (recibo && recibo.status === 'accepted') ok++

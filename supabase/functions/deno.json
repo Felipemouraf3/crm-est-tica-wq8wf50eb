@@ -1,10 +1,13 @@
 {
   "_versions": {
-    "admin-invite-user": 6,
-    "search-expert-patient": 5,
-    "enqueue-outbound-message": 1,
-    "process-inbound-event": 1,
-    "send-whatsapp-message": 1,
-    "webhook-whatsapp-meta": 1
+    "admin-invite-user": 7,
+    "search-expert-patient": 8,
+    "enqueue-outbound-message": 2,
+    "process-inbound-event": 4,
+    "send-whatsapp-message": 4,
+    "webhook-whatsapp-meta": 2,
+    "probe-egress-experts": 3,
+    "webhook-whatsapp-zapi": 2,
+    "admin-test-channel": 2
   }
 }

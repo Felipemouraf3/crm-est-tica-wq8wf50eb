@@ -1,10 +1,12 @@
-// Edge Function send-whatsapp-message v1 — P2-S03-T02
+// Edge Function send-whatsapp-message v2 — P2-S03-T02 + T03
 // Consumidor da fila outbound_messages (acionado por pg_cron a cada 10s).
 // Lê o item (read), busca o outbound_request pelo ref_id, escolhe o adaptador
-// pelo provider da conta (aqui: meta_cloud), envia texto ou modelo, grava
+// pelo provider da conta (meta_cloud | z_api), envia texto ou modelo, grava
 // provider_message_id + status sent; erro → nova tentativa da fila (5 em 30min,
 // depois dead_letter — contrato comum 4.4). Nunca loga conteúdo nem token.
 // Proteção: chamada interna com INTERNAL_JOB_SECRET (header x-internal-job).
+// v2 (T03): branch Z-API (send-text com Client-Token) + leitura de segredos via
+// RPC _edge_read_secret (schema vault não exposto na API PostgREST).
 // @ts-nocheck
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import {
@@ -13,6 +15,7 @@ import {
   corpoModelo,
   META_GRAPH_DEFAULT_VERSION,
 } from '../_shared/providers/meta.ts'
+import { enviarZapi } from '../_shared/providers/zapi.ts'
 
 const json = (status: number, corpo: unknown) =>
   new Response(JSON.stringify(corpo), { status, headers: { 'Content-Type': 'application/json' } })
@@ -121,8 +124,10 @@ Deno.serve(async (req: Request) => {
         continue
       }
 
-      // token do Vault
+      // credenciais do Vault (via RPC SECURITY DEFINER — schema vault não
+      // exposto na API PostgREST; lição de 2026-10-24)
       let token: string | null = null
+      let clientToken: string | null = null
       if (conta.integration_connection_id) {
         const { data: conn } = await admin
           .from('integration_connections')
@@ -130,13 +135,26 @@ Deno.serve(async (req: Request) => {
           .eq('id', conta.integration_connection_id)
           .maybeSingle()
         if (conn?.secret_ref?.startsWith('vault:')) {
-          const { data: s } = await admin
-            .schema('vault')
-            .from('secrets')
-            .select('secret')
-            .eq('id', conn.secret_ref.replace('vault:', ''))
+          const { data: s } = await admin.rpc('_edge_read_secret', {
+            p_secret_ref: conn.secret_ref,
+          })
+          token = typeof s === 'string' && s.length > 0 ? s : null
+        }
+        // Client-Token da Z-API: segunda conexão (connection_key = <instanceId>:client_token)
+        if (conta.provider === 'z_api') {
+          const { data: conn2 } = await admin
+            .from('integration_connections')
+            .select('secret_ref')
+            .eq('clinic_id', pedido.clinic_id)
+            .eq('provider', 'canal_z_api')
+            .eq('connection_key', `${conta.external_account_id}:client_token`)
             .maybeSingle()
-          token = s?.secret ?? null
+          if (conn2?.secret_ref?.startsWith('vault:')) {
+            const { data: s2 } = await admin.rpc('_edge_read_secret', {
+              p_secret_ref: conn2.secret_ref,
+            })
+            clientToken = typeof s2 === 'string' && s2.length > 0 ? s2 : null
+          }
         }
       }
       if (!token) {
@@ -153,16 +171,7 @@ Deno.serve(async (req: Request) => {
         continue
       }
 
-      // monta o corpo (texto ou modelo) e envia pelo adaptador
-      const corpo =
-        pedido.kind === 'text'
-          ? corpoTexto(pedido.to_phone_e164, pedido.test_body ?? '')
-          : corpoModelo(
-              pedido.to_phone_e164,
-              pedido.template_name ?? '',
-              pedido.template_language ?? 'pt_BR',
-            )
-
+      // monta o corpo e envia pelo adaptador do provider da conta
       await admin
         .from('outbound_requests')
         .update({
@@ -172,14 +181,36 @@ Deno.serve(async (req: Request) => {
         })
         .eq('id', pedido.id)
 
-      const versao = META_GRAPH_DEFAULT_VERSION // versão da Graph API é config da conexão (SPEC); default do contrato
-      const resultado = await enviarMeta(
-        versao,
-        conta.external_account_id,
-        token,
-        corpo,
-        correlationId,
-      )
+      let resultado: {
+        ok: boolean
+        provider_message_id: string | null
+        http_status: number
+        error_code: string | null
+      }
+      if (conta.provider === 'z_api') {
+        // Z-API: texto livre (send-text); a janela 24h/modelo é regra da Meta
+        const texto =
+          pedido.kind === 'text' ? (pedido.test_body ?? '') : (pedido.template_name ?? '')
+        resultado = await enviarZapi(
+          conta.external_account_id,
+          token,
+          clientToken ?? '',
+          pedido.to_phone_e164,
+          texto,
+          correlationId,
+        )
+      } else {
+        const corpo =
+          pedido.kind === 'text'
+            ? corpoTexto(pedido.to_phone_e164, pedido.test_body ?? '')
+            : corpoModelo(
+                pedido.to_phone_e164,
+                pedido.template_name ?? '',
+                pedido.template_language ?? 'pt_BR',
+              )
+        const versao = META_GRAPH_DEFAULT_VERSION // versão da Graph API é config da conexão (SPEC); default do contrato
+        resultado = await enviarMeta(versao, conta.external_account_id, token, corpo, correlationId)
+      }
 
       if (resultado.ok) {
         await admin
@@ -201,7 +232,7 @@ Deno.serve(async (req: Request) => {
               organization_id: pedido.organization_id,
               clinic_id: pedido.clinic_id,
               channel_account_id: conta.id,
-              provider: 'meta_cloud',
+              provider: conta.provider,
               provider_message_id: resultado.provider_message_id,
               status: 'sent',
               error_code: null,
@@ -279,13 +310,15 @@ async function moverParaDeadLetter(
     attempts,
     correlation_hint: correlationId,
   })
-  await admin.schema('pgmq').rpc('send', {
-    queue_name: 'dead_letter',
-    msg: {
-      source_queue: fila,
-      ref_id: refId,
-      error_code: errorCode,
-      correlation_id: correlationId,
-    },
-  })
+  await admin
+    .schema('pgmq')
+    .rpc('send', {
+      queue_name: 'dead_letter',
+      msg: {
+        source_queue: fila,
+        ref_id: refId,
+        error_code: errorCode,
+        correlation_id: correlationId,
+      },
+    })
 }
