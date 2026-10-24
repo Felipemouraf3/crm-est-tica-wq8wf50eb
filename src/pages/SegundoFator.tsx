@@ -9,7 +9,9 @@
 // b) GET /factors devolve 405 — listar fatores via GET /user (campo factors);
 // c) verify exige challenge_id SEMPRE (mesmo no enroll: enroll → challenge → verify);
 // d) qr_code vem como SVG cru → converter em data-URL para o <img>;
-// e) GET /user retorna os fatores com factor_type (não type) — filtro aceita ambos.
+// e) GET /user retorna os fatores com factor_type (não type) — filtro aceita ambos;
+// f) verify devolve NOVA SESSÃO (AAL2) — persistir com setSession, senão a guarda
+//    de rota continua lendo o JWT antigo (aal1) e devolve para /segundo-fator.
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '@/lib/supabase/client'
@@ -170,6 +172,15 @@ function SegundoFator() {
         code: codigo.trim(),
       })
       if (!v.ok) throw { message: v.erro ?? 'Código inválido' }
+      // persiste a nova sessão (AAL2) no cliente — sem isso a guarda de rota
+      // continua lendo o JWT antigo (aal1) e devolve para /segundo-fator
+      const nova = v.data as { access_token?: string; refresh_token?: string } | undefined
+      if (nova?.access_token && nova?.refresh_token) {
+        await supabase.auth.setSession({
+          access_token: nova.access_token,
+          refresh_token: nova.refresh_token,
+        })
+      }
       setEtapa('sucesso')
     } catch (e) {
       setErro(getFriendlyAuthErrorMessage(e))
