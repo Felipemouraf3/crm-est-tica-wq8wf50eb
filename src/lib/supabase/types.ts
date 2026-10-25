@@ -1,9 +1,9 @@
-// src/lib/supabase/types.ts — P2-S01-T03
+// src/lib/supabase/types.ts — P2-S01-T03 + P2-S04-T02
 // Tipos do schema public gerados do catálogo REAL do Supabase psestetica
-// (pg_class/pg_attribute/pg_proc consultados ao vivo em 2026-10-18).
+// (pg_class/pg_attribute/pg_proc consultados ao vivo em 2026-10-18;
+// atualizado em 2026-10-24 com conversations/messages/consents da P2-S04-T01).
 // Equivale à saída de `supabase gen types typescript --linked`; regenerar via
 // CLI na P2-S01-T04 (prova formal do diff vazio).
-// NOTA: substitui o stub vazio auto-gerado — atualizado pela task, não pelo gerador.
 
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[]
 
@@ -113,6 +113,31 @@ export type Database = {
         }
         Update: Partial<Database['public']['Tables']['config_versions']['Insert']>
       }
+      consents: {
+        Row: {
+          id: string
+          organization_id: string
+          contact_id: string
+          channel: string
+          purpose: string
+          status: string
+          source: string
+          captured_at: string
+          captured_by: string | null
+        }
+        Insert: {
+          id?: string
+          organization_id: string
+          contact_id: string
+          channel: string
+          purpose: string
+          status: string
+          source: string
+          captured_at?: string
+          captured_by?: string | null
+        }
+        Update: Partial<Database['public']['Tables']['consents']['Insert']>
+      }
       contact_identities: {
         Row: {
           id: string
@@ -159,6 +184,49 @@ export type Database = {
         }
         Update: Partial<Database['public']['Tables']['contacts']['Insert']>
       }
+      conversations: {
+        Row: {
+          id: string
+          organization_id: string
+          clinic_id: string
+          contact_id: string
+          channel_account_id: string
+          status: string
+          identification: string
+          expert_patient_uuid: string | null
+          owner_user_id: string | null
+          team_id: string | null
+          automation_paused: boolean
+          last_inbound_at: string | null
+          last_outbound_at: string | null
+          last_message_at: string | null
+          next_action_at: string | null
+          unread_count: number
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          organization_id: string
+          clinic_id: string
+          contact_id: string
+          channel_account_id: string
+          status?: string
+          identification?: string
+          expert_patient_uuid?: string | null
+          owner_user_id?: string | null
+          team_id?: string | null
+          automation_paused?: boolean
+          last_inbound_at?: string | null
+          last_outbound_at?: string | null
+          last_message_at?: string | null
+          next_action_at?: string | null
+          unread_count?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Update: Partial<Database['public']['Tables']['conversations']['Insert']>
+      }
       expert_patients_cache: {
         Row: {
           id: string
@@ -181,7 +249,7 @@ export type Database = {
           phone_e164: string
           payload?: Json
           result_class?: string
-          fetched_at?: string
+          fetched_at: string
           expires_at: string
           invalidated?: boolean
           correlation_id?: string | null
@@ -209,8 +277,8 @@ export type Database = {
           clinic_id: string
           contact_id: string
           expert_patient_uuid: string
-          match_method?: string
-          confidence?: number
+          match_method: string
+          confidence: number
           linked_by?: string | null
           created_at?: string
           updated_at?: string
@@ -270,6 +338,49 @@ export type Database = {
           invite_status?: string
         }
         Update: Partial<Database['public']['Tables']['memberships']['Insert']>
+      }
+      messages: {
+        Row: {
+          id: string
+          organization_id: string
+          clinic_id: string
+          conversation_id: string
+          direction: string
+          sender_type: string
+          sender_user_id: string | null
+          provider: string
+          provider_message_id: string | null
+          content_type: string
+          body: string | null
+          status: string
+          outbound_request_id: string | null
+          sent_at: string | null
+          delivered_at: string | null
+          read_at: string | null
+          occurred_at: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          organization_id: string
+          clinic_id: string
+          conversation_id: string
+          direction: string
+          sender_type: string
+          sender_user_id?: string | null
+          provider: string
+          provider_message_id?: string | null
+          content_type?: string
+          body?: string | null
+          status: string
+          outbound_request_id?: string | null
+          sent_at?: string | null
+          delivered_at?: string | null
+          read_at?: string | null
+          occurred_at?: string
+          created_at?: string
+        }
+        Update: Partial<Database['public']['Tables']['messages']['Insert']>
       }
       organizations: {
         Row: {
@@ -347,7 +458,7 @@ export type Database = {
           id?: string
           clinic_id: string
           name: string
-          queue_type: string
+          queue_type?: string
           created_at?: string
           updated_at?: string
         }
@@ -359,116 +470,105 @@ export type Database = {
     }
     Functions: {
       admin_get_connection_status: {
-        Args: { p_clinic_id: string | null; p_provider: string; p_connection_key: string }
-        Returns: {
-          connection_id: string
-          secret_ref: string
-          secret_hint: string
-          health_status: string
-          last_tested_at: string | null
-          updated_at: string
-        }[]
+        Args: { p_connection_id: string }
+        Returns: Json
       }
       admin_invite_user: {
-        Args: { p_email: string; p_name: string; p_clinic_roles: Json }
-        Returns: string
+        Args: {
+          p_email: string
+          p_organization_id: string
+          p_clinic_id: string
+          p_role: string
+          p_display_name?: string
+        }
+        Returns: Json
       }
       admin_list_config_versions: {
-        Args: { p_clinic_id: string | null; p_provider: string; p_connection_key: string }
-        Returns: { version: number; config_sanitized: Json; published_at: string }[]
+        Args: { p_connection_id: string }
+        Returns: Json
       }
       admin_rollback_config: {
-        Args: { p_connection_id: string; p_version: number }
-        Returns: {
-          connection_id: string
-          restored_version: number
-          health_status: string
-          updated_at: string
-        }[]
+        Args: { p_connection_id: string; p_to_version: number }
+        Returns: Json
+      }
+      admin_save_channel_account: {
+        Args: {
+          p_clinic_id: string
+          p_provider: string
+          p_phone_e164: string
+          p_external_account_id: string
+          p_external_business_id?: string
+          p_display_name?: string
+          p_capabilities?: Json
+          p_token?: string
+          p_app_secret?: string
+          p_instance_token?: string
+          p_client_token?: string
+        }
+        Returns: Json
       }
       admin_save_integration_secret: {
         Args: {
-          p_clinic_id: string | null
           p_provider: string
           p_connection_key: string
           p_secret: string
-          p_config_sanitized?: Json
+          p_organization_id: string
+          p_clinic_id?: string
+          p_config?: Json
         }
-        Returns: {
-          connection_id: string
-          secret_ref: string
-          secret_hint: string
-          health_status: string
-          created: boolean
-          version: number
-          updated_at: string
-        }[]
+        Returns: Json
+      }
+      admin_set_channel_status: {
+        Args: { p_channel_account_id: string; p_status: string }
+        Returns: Json
+      }
+      admin_test_channel: {
+        Args: { p_channel_account_id: string }
+        Returns: Json
       }
       admin_test_connection: {
-        Args: { p_clinic_id: string | null; p_provider: string; p_connection_key: string }
-        Returns: {
-          connection_id: string
-          health_status: string
-          last_tested_at: string | null
-          diagnostico: Json
-        }[]
+        Args: { p_connection_id: string }
+        Returns: Json
       }
       effective_clinic_setting: {
         Args: { p_clinic: string; p_key: string }
-        Returns: { value_json: Json | null; origin: string; setting_version: number }[]
+        Returns: Json
       }
       invalidate_expert_cache: {
-        Args: { p_clinic_id: string; p_phone: string }
-        Returns: number
-      }
-      is_active_member: {
-        Args: { p_org: string; p_clinic: string }
-        Returns: boolean
-      }
-      is_clinic_member: {
-        Args: { p_clinic: string }
-        Returns: boolean
-      }
-      is_clinic_writer: {
-        Args: { p_org: string; p_clinic: string }
-        Returns: boolean
-      }
-      is_colleague: {
-        Args: { p_user: string }
-        Returns: boolean
-      }
-      is_org_member: {
-        Args: { p_org: string }
-        Returns: boolean
-      }
-      is_org_member_for_user: {
-        Args: { p_org: string; p_user: string }
-        Returns: boolean
-      }
-      is_org_owner: {
-        Args: { p_org: string }
-        Returns: boolean
-      }
-      is_org_writer: {
-        Args: { p_org: string }
-        Returns: boolean
+        Args: { p_clinic: string; p_phone?: string }
+        Returns: void
       }
       link_expert_patient: {
         Args: {
-          p_clinic_id: string
-          p_contact_id: string
-          p_expert_patient_uuid: string
-          p_match_method?: string
+          p_contact: string
+          p_clinic: string
+          p_expert_uuid: string
+          p_method: string
+          p_confidence: number
         }
-        Returns: Json
+        Returns: uuid
       }
       normalize_e164: {
         Args: { p_raw: string }
         Returns: string
       }
-      user_org_ids: {
-        Args: Record<string, never>
-        Returns: string[]
+      register_consent: {
+        Args: {
+          p_contact: string
+          p_channel: string
+          p_purpose: string
+          p_status: string
+          p_source: string
+        }
+        Returns: void
+      }
+      send_human_message: {
+        Args: { p_conversation: string; p_body: string }
+        Returns: string
+      }
+      unlink_expert_patient: {
+        Args: { p_contact: string; p_clinic: string }
+        Returns: void
       }
     }
     Enums: {
@@ -480,141 +580,11 @@ export type Database = {
   }
 }
 
-type DatabaseWithoutInternals = Omit<Database, '__InternalSupabase'>
-
-type DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, 'public'>]
-
-export type Tables<
-  DefaultSchemaTableNameOrOptions extends
-    | keyof (DefaultSchema['Tables'] & DefaultSchema['Views'])
-    | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
-    schema: keyof DatabaseWithoutInternals
-  }
-    ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions['schema']]['Tables'] &
-        DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions['schema']]['Views'])
-    : never = never,
-> = DefaultSchemaTableNameOrOptions extends {
-  schema: keyof DatabaseWithoutInternals
-}
-  ? (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions['schema']]['Tables'] &
-      DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions['schema']]['Views'])[TableName] extends {
-      Row: infer R
-    }
-    ? R
-    : never
-  : DefaultSchemaTableNameOrOptions extends keyof (DefaultSchema['Tables'] & DefaultSchema['Views'])
-    ? (DefaultSchema['Tables'] & DefaultSchema['Views'])[DefaultSchemaTableNameOrOptions] extends {
-        Row: infer R
-      }
-      ? R
-      : never
-    : never
-
-export type TablesInsert<
-  DefaultSchemaTableNameOrOptions extends
-    | keyof DefaultSchema['Tables']
-    | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
-    schema: keyof DatabaseWithoutInternals
-  }
-    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions['schema']]['Tables']
-    : never = never,
-> = DefaultSchemaTableNameOrOptions extends {
-  schema: keyof DatabaseWithoutInternals
-}
-  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions['schema']]['Tables'][TableName] extends {
-      Insert: infer I
-    }
-    ? I
-    : never
-  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema['Tables']
-    ? DefaultSchemaTableNameOrOptions extends keyof DatabaseWithoutInternals['public']['Tables']
-      ? DatabaseWithoutInternals['public']['Tables'][DefaultSchemaTableNameOrOptions] extends {
-          Insert: infer I
-        }
-        ? I
-        : never
-      : never
-    : never
-
-export type TablesUpdate<
-  DefaultSchemaTableNameOrOptions extends
-    | keyof DefaultSchema['Tables']
-    | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
-    schema: keyof DatabaseWithoutInternals
-  }
-    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions['schema']]['Tables']
-    : never = never,
-> = DefaultSchemaTableNameOrOptions extends {
-  schema: keyof DatabaseWithoutInternals
-}
-  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions['schema']]['Tables'][TableName] extends {
-      Update: infer U
-    }
-    ? U
-    : never
-  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema['Tables']
-    ? DefaultSchemaTableNameOrOptions extends keyof DatabaseWithoutInternals['public']['Tables']
-      ? DatabaseWithoutInternals['public']['Tables'][DefaultSchemaTableNameOrOptions] extends {
-          Update: infer U
-        }
-        ? U
-        : never
-      : never
-    : never
-
-export type Enums<
-  DefaultSchemaEnumNameOrOptions extends
-    | keyof DefaultSchema['Enums']
-    | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends DefaultSchemaEnumNameOrOptions extends {
-    schema: keyof DatabaseWithoutInternals
-  }
-    ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions['schema']]['Enums']
-    : never = never,
-> = DefaultSchemaEnumNameOrOptions extends {
-  schema: keyof DatabaseWithoutInternals
-}
-  ? DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions['schema']]['Enums'][EnumName]
-  : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema['Enums']
-    ? DefaultSchemaEnumNameOrOptions extends keyof DatabaseWithoutInternals['public']['Enums']
-      ? DatabaseWithoutInternals['public']['Enums'][DefaultSchemaEnumNameOrOptions]
-      : never
-    : never
-
-export type CompositeTypes<
-  PublicCompositeTypeNameOrOptions extends
-    | keyof DefaultSchema['CompositeTypes']
-    | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
-    schema: keyof DatabaseWithoutInternals
-  }
-    ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions['schema']]['CompositeTypes']
-    : never = never,
-> = PublicCompositeTypeNameOrOptions extends {
-  schema: keyof DatabaseWithoutInternals
-}
-  ? DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions['schema']]['CompositeTypes'][CompositeTypeName]
-  : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema['CompositeTypes']
-    ? PublicCompositeTypeNameOrOptions extends keyof DatabaseWithoutInternals['public']['CompositeTypes']
-      ? DatabaseWithoutInternals['public']['CompositeTypes'][PublicCompositeTypeNameOrOptions]
-      : never
-    : never
-
-export const Constants = {
-  public: {
-    Enums: {},
-  },
-} as const
-
-// Papéis válidos (SPEC P1-S02; CHECK memberships_role_check)
 export type Papel =
   | 'owner'
   | 'clinic_admin'
-  | 'manager'
   | 'sales'
   | 'reception'
   | 'post_sales'
-  | 'viewer'
+  | 'manager'
+  | 'atendente'

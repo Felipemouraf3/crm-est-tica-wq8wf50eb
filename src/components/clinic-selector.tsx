@@ -1,7 +1,8 @@
-// src/components/clinic-selector.tsx — P2-S01-T03
+// src/components/clinic-selector.tsx — P2-S01-T03 + P2-S04-T02
 // Seletor de clínica: mostra só clínicas com vínculo ativo do usuário (RLS).
-// A escolha fica em localStorage por conveniência; o SERVIDOR sempre valida.
-import { useEffect, useState } from 'react'
+// A escolha fica em localStorage por convenção; o SERVIDOR sempre valida.
+// P2-S04-T02: exporta useClinicaAtiva para as telas lerem a clínica ativa.
+import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
 import { supabase } from '@/lib/supabase/client'
 import type { Database } from '@/lib/supabase/types'
 
@@ -24,6 +25,12 @@ export function salvarClinica(id: string | null) {
   } catch {
     // no-op
   }
+}
+
+// Contexto: a clínica ativa fica disponível para todas as telas dentro do AppShell
+const ClinicaCtx = createContext<string | null>(null)
+export function useClinicaAtiva(): { clinicaAtiva: string | null } {
+  return { clinicaAtiva: useContext(ClinicaCtx) }
 }
 
 export function ClinicSelector({
@@ -92,4 +99,15 @@ export function ClinicSelector({
       ))}
     </select>
   )
+}
+
+// Provedor do contexto — usado pelo AppShell
+export function ClinicaProvider({
+  value,
+  children,
+}: {
+  value: string | null
+  children: ReactNode
+}) {
+  return <ClinicaCtx.Provider value={value}>{children}</ClinicaCtx.Provider>
 }

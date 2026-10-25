@@ -12,6 +12,8 @@ import AdminProtegido from './pages/AdminProtegido'
 import AdminConexoes from './pages/AdminConexoes'
 import AdminCanais from './pages/AdminCanais'
 import IdentificarPaciente from './pages/IdentificarPaciente'
+import Atendimento from './pages/Atendimento'
+import Conversa from './pages/Conversa'
 import SegundoFator from './pages/SegundoFator'
 import { RequireRole } from './components/guards'
 import NotFound from './pages/NotFound'
@@ -51,6 +53,9 @@ const App = () => (
             />
             {/* P2-S02-T03: tela de busca — todos os papéis com vínculo ativo */}
             <Route path="/pacientes/identificar" element={<IdentificarPaciente />} />
+            {/* P2-S04-T02: caixa de entrada e conversa em tempo real */}
+            <Route path="/atendimento" element={<Atendimento />} />
+            <Route path="/atendimento/:conversationId" element={<Conversa />} />
           </Route>
           <Route path="*" element={<NotFound />} />
         </Routes>
