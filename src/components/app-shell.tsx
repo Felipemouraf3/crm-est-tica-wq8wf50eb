@@ -22,7 +22,10 @@ const ITENS: Item[] = [
   { rota: '/admin/conexoes', rotulo: 'Conexões', papeis: ['owner', 'clinic_admin'] },
   { rota: '/admin/canais', rotulo: 'Canais WhatsApp', papeis: ['owner', 'clinic_admin'] },
   { rota: '/admin/filas', rotulo: 'Filas e prazos', papeis: ['owner', 'clinic_admin'] },
+  { rota: '/admin/conhecimento', rotulo: 'Conhecimento', papeis: ['owner', 'clinic_admin'] },
+  { rota: '/admin/agentes', rotulo: 'Agentes', papeis: ['owner', 'clinic_admin'] },
 ]
+>>>>>>>
 
 // P2-S05-T03: chave "Disponível / Pausa" — batimento a cada 30s enquanto a aba está aberta.
 function ChavePresenca({ clinicaAtiva }: { clinicaAtiva: string | null }) {

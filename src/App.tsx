@@ -12,7 +12,10 @@ import AdminProtegido from './pages/AdminProtegido'
 import AdminConexoes from './pages/AdminConexoes'
 import AdminCanais from './pages/AdminCanais'
 import AdminFilas from './pages/AdminFilas'
+import AdminConhecimento from './pages/AdminConhecimento'
+import AdminAgentes from './pages/AdminAgentes'
 import Filas from './pages/Filas'
+>>>>>>>
 import IdentificarPaciente from './pages/IdentificarPaciente'
 import Atendimento from './pages/Atendimento'
 import Conversa from './pages/Conversa'
@@ -62,6 +65,25 @@ const App = () => (
                 </RequireRole>
               }
             />
+            {/* P2-S06-T03: console de conhecimento (owner/clinic_admin + AAL2) */}
+            <Route
+              path="/admin/conhecimento"
+              element={
+                <RequireRole papeis={['owner', 'clinic_admin']} exigeMfa>
+                  <AdminConhecimento />
+                </RequireRole>
+              }
+            />
+            {/* P2-S06-T03: console de agentes — interruptor e rotas (owner/clinic_admin + AAL2) */}
+            <Route
+              path="/admin/agentes"
+              element={
+                <RequireRole papeis={['owner', 'clinic_admin']} exigeMfa>
+                  <AdminAgentes />
+                </RequireRole>
+              }
+            />
+>>>>>>>
             {/* P2-S02-T03: tela de busca — todos os papéis com vínculo ativo */}
             <Route path="/pacientes/identificar" element={<IdentificarPaciente />} />
             {/* P2-S04-T02: caixa de entrada e conversa em tempo real */}
