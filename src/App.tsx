@@ -14,7 +14,6 @@ import AdminCanais from './pages/AdminCanais'
 import AdminFilas from './pages/AdminFilas'
 import Filas from './pages/Filas'
 import IdentificarPaciente from './pages/IdentificarPaciente'
->>>>>>>
 import Atendimento from './pages/Atendimento'
 import Conversa from './pages/Conversa'
 import SegundoFator from './pages/SegundoFator'
@@ -71,7 +70,6 @@ const App = () => (
             {/* P2-S05-T03: visão do gestor da fila (todos os papéis; RPCs revalidam) */}
             <Route path="/filas" element={<Filas />} />
           </Route>
->>>>>>>
           <Route path="*" element={<NotFound />} />
         </Routes>
       </TooltipProvider>

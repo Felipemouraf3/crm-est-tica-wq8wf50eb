@@ -1,8 +1,10 @@
-// src/components/app-shell.tsx — P2-S01-T03 + P2-S02-T03 + P2-S03-T01 + P2-S04-T02 + P2-S05-T01
-// Casca do app: menu lateral por papel + topo com seletor de clínica.
+// src/components/app-shell.tsx — P2-S01-T03 + P2-S02-T03 + P2-S03-T01 + P2-S04-T02 + P2-S05-T01 + P2-S05-T03
+// Casca do app: menu lateral por papel + topo com seletor de clínica e chave de presença.
 // O menu é renderizado conforme o papel; o servidor revalida sempre (RLS).
 // P2-S04-T02: a clínica ativa vai por contexto para as telas (useClinicaAtiva).
 // P2-S05-T01: item "Filas e prazos" (owner/clinic_admin).
+// P2-S05-T03: item "Fila de atendimento" (/filas, todos) + chave "Disponível / Pausa"
+// com batimento a cada 30s enquanto a aba está aberta.
 import { useEffect, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '@/lib/supabase/client'
@@ -15,13 +17,12 @@ const ITENS: Item[] = [
   { rota: '/inicio', rotulo: 'Início', papeis: 'todos' },
   { rota: '/atendimento', rotulo: 'Atendimento', papeis: 'todos' },
   { rota: '/pacientes/identificar', rotulo: 'Identificar paciente', papeis: 'todos' },
+  { rota: '/filas', rotulo: 'Fila de atendimento', papeis: 'todos' },
   { rota: '/admin', rotulo: 'Administração', papeis: ['owner', 'clinic_admin'] },
   { rota: '/admin/conexoes', rotulo: 'Conexões', papeis: ['owner', 'clinic_admin'] },
   { rota: '/admin/canais', rotulo: 'Canais WhatsApp', papeis: ['owner', 'clinic_admin'] },
   { rota: '/admin/filas', rotulo: 'Filas e prazos', papeis: ['owner', 'clinic_admin'] },
-  { rota: '/filas', rotulo: 'Fila de atendimento', papeis: 'todos' },
 ]
->>>>>>>
 
 // P2-S05-T03: chave "Disponível / Pausa" — batimento a cada 30s enquanto a aba está aberta.
 function ChavePresenca({ clinicaAtiva }: { clinicaAtiva: string | null }) {
@@ -33,7 +34,6 @@ function ChavePresenca({ clinicaAtiva }: { clinicaAtiva: string | null }) {
     supabase.auth.getSession().then(({ data }) => {
       const user = data.session?.user
       if (!user || !vivo) return
-      // estado atual
       supabase
         .from('attendant_presence')
         .select('state')
@@ -41,19 +41,18 @@ function ChavePresenca({ clinicaAtiva }: { clinicaAtiva: string | null }) {
         .eq('clinic_id', clinicaAtiva)
         .maybeSingle()
         .then(({ data: p }) => {
-          if (vivo && p) setEstado((p.state === 'away' ? 'away' : 'online'))
+          if (vivo && p) setEstado(p.state === 'away' ? 'away' : 'online')
         })
     })
-    // batimento a cada 30s
     const batimento = setInterval(() => {
       if (!vivo || !clinicaAtiva) return
-      supabase.rpc('update_presence', { p_clinic: clinicaAtiva, p_state: estado ?? 'online' })
+      void supabase.rpc('update_presence', { p_clinic: clinicaAtiva, p_state: 'online' })
     }, 30000)
     return () => {
       vivo = false
       clearInterval(batimento)
     }
-  }, [clinicaAtiva, estado])
+  }, [clinicaAtiva])
 
   if (!clinicaAtiva) return null
   return (
@@ -65,9 +64,7 @@ function ChavePresenca({ clinicaAtiva }: { clinicaAtiva: string | null }) {
         void supabase.rpc('update_presence', { p_clinic: clinicaAtiva, p_state: novo })
       }}
       className={`rounded-full px-3 py-1 text-xs font-semibold ${
-        estado === 'online'
-          ? 'bg-green-100 text-green-800'
-          : 'bg-amber-100 text-amber-800'
+        estado === 'online' ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'
       }`}
     >
       {estado === 'online' ? 'Disponível' : 'Pausa'}
@@ -76,7 +73,6 @@ function ChavePresenca({ clinicaAtiva }: { clinicaAtiva: string | null }) {
 }
 
 export function AppShell({ papel, children }: { papel: Papel | null; children: ReactNode }) {
->>>>>>>
   const [clinicaAtiva, setClinicaAtiva] = useState<string | null>(null)
   const [email, setEmail] = useState('')
 
@@ -115,7 +111,6 @@ export function AppShell({ papel, children }: { papel: Papel | null; children: R
               <span className="text-xs text-[#6B6560]">{email}</span>
             </div>
           </header>
->>>>>>>
           {children}
         </main>
       </div>
