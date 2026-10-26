@@ -1,7 +1,8 @@
-// src/components/app-shell.tsx — P2-S01-T03 + P2-S02-T03 + P2-S03-T01 + P2-S04-T02
+// src/components/app-shell.tsx — P2-S01-T03 + P2-S02-T03 + P2-S03-T01 + P2-S04-T02 + P2-S05-T01
 // Casca do app: menu lateral por papel + topo com seletor de clínica.
 // O menu é renderizado conforme o papel; o servidor revalida sempre (RLS).
 // P2-S04-T02: a clínica ativa vai por contexto para as telas (useClinicaAtiva).
+// P2-S05-T01: item "Filas e prazos" (owner/clinic_admin).
 import { useEffect, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '@/lib/supabase/client'
@@ -18,7 +19,6 @@ const ITENS: Item[] = [
   { rota: '/admin/conexoes', rotulo: 'Conexões', papeis: ['owner', 'clinic_admin'] },
   { rota: '/admin/canais', rotulo: 'Canais WhatsApp', papeis: ['owner', 'clinic_admin'] },
   { rota: '/admin/filas', rotulo: 'Filas e prazos', papeis: ['owner', 'clinic_admin'] },
->>>>>>>
 ]
 
 export function AppShell({ papel, children }: { papel: Papel | null; children: ReactNode }) {
