@@ -706,8 +706,8 @@ export type Database = {
         }
         Update: Partial<Database['public']['Tables']['user_shifts']['Insert']>
       }
->>>>>>>
       teams: {
+>>>>>>>
         Row: {
           id: string
           clinic_id: string
@@ -885,9 +885,9 @@ export type Database = {
         Returns: boolean
       }
     }
->>>>>>>
-    Enums: {
-      [_ in never]: never
+  }
+  Enums: {
+>>>>>>>      [_ in never]: never
     }
     CompositeTypes: {
       [_ in never]: never
