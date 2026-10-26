@@ -3,9 +3,10 @@
 // e política de distribuição versionada (rascunho → publicar → voltar).
 // Usa os RPCs admin_save_queue / admin_save_hours / admin_save_policy /
 // admin_publish_policy / admin_rollback_policy / admin_list_policy_versions.
+// v2: clínica ativa lida de localStorage + clinics (padrão AdminCanais) —
+// o contexto useClinicaAtiva não alcança esta rota (ClinicaProvider vive no AppShell).
 import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase/client'
-import { useClinicaAtiva } from '@/components/clinic-selector'
 import { useToast } from '@/hooks/use-toast'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -57,7 +58,7 @@ const PROPOSITOS = [
 ]
 
 export default function AdminFilas() {
-  const { clinicaAtiva } = useClinicaAtiva()
+  const [clinicaAtiva, setClinicaAtiva] = useState<string | null>(null)
   const { toast } = useToast()
   const [filas, setFilas] = useState<Fila[]>([])
   const [equipes, setEquipes] = useState<Equipe[]>([])
@@ -86,6 +87,25 @@ export default function AdminFilas() {
   const [eDia, setEDia] = useState(1)
   const [eAbre, setEAbre] = useState('08:00')
   const [eFecha, setEFecha] = useState('18:00')
+
+  useEffect(() => {
+    let vivo = true
+    ;(async () => {
+      const ativa =
+        typeof localStorage !== 'undefined' ? localStorage.getItem('clinica_ativa') : null
+      const { data: clinicas } = await supabase
+        .from('clinics')
+        .select('id, name')
+        .eq('status', 'active')
+        .order('name')
+      if (!vivo) return
+      const escolhida = (clinicas ?? []).find((c) => c.id === ativa) ?? (clinicas ?? [])[0]
+      if (escolhida) setClinicaAtiva(escolhida.id)
+    })()
+    return () => {
+      vivo = false
+    }
+  }, [])
 
   const carregar = useCallback(async (clinic: string) => {
     setCarregando(true)
