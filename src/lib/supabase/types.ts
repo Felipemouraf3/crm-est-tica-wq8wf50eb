@@ -707,8 +707,8 @@ export type Database = {
         Update: Partial<Database['public']['Tables']['user_shifts']['Insert']>
       }
       teams: {
->>>>>>>
         Row: {
+>>>>>>>
           id: string
           clinic_id: string
           name: string
