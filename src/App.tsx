@@ -11,6 +11,7 @@ import Inicio from './pages/Inicio'
 import AdminProtegido from './pages/AdminProtegido'
 import AdminConexoes from './pages/AdminConexoes'
 import AdminCanais from './pages/AdminCanais'
+import AdminFilas from './pages/AdminFilas'
 import IdentificarPaciente from './pages/IdentificarPaciente'
 import Atendimento from './pages/Atendimento'
 import Conversa from './pages/Conversa'
@@ -64,7 +65,6 @@ const App = () => (
             <Route path="/pacientes/identificar" element={<IdentificarPaciente />} />
             {/* P2-S04-T02: caixa de entrada e conversa em tempo real */}
             <Route path="/atendimento" element={<Atendimento />} />
->>>>>>>
             <Route path="/atendimento/:conversationId" element={<Conversa />} />
           </Route>
           <Route path="*" element={<NotFound />} />

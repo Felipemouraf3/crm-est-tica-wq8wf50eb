@@ -1,15 +1,9 @@
-// src/lib/supabase/types.ts — P2-S01-T03 + P2-S04-T02
-// Tipos do schema public gerados do catálogo REAL do Supabase psestetica
-// (pg_class/pg_attribute/pg_proc consultados ao vivo em 2026-10-18;
-// atualizado em 2026-10-24 com conversations/messages/consents da P2-S04-T01).
-// Equivale à saída de `supabase gen types typescript --linked`; regenerar via
-// CLI na P2-S01-T04 (prova formal do diff vazio).
-
+// src/lib/supabase/types.ts — P2-S01-T03 + P2-S04-T02 + P2-S05-T01
+// Tipos do schema public do catálogo REAL do Supabase psestetica; atualizado em
+// 2026-10-26 com as 9 tabelas + 9 funções da P2-S05-T01 (tickets/filas/config).
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[]
 
 export type Database = {
-  // Allows to automatically instantiate createClient with right options
-  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
     PostgrestVersion: '14.18'
   }
@@ -135,6 +129,7 @@ export type Database = {
           source: string
           captured_at?: string
           captured_by?: string | null
+          created_at?: string
         }
         Update: Partial<Database['public']['Tables']['consents']['Insert']>
       }
@@ -710,7 +705,6 @@ export type Database = {
         Row: {
           id: string
           clinic_id: string
->>>>>>>
           name: string
           queue_type: string
           created_at: string
@@ -841,11 +835,25 @@ export type Database = {
         Returns: string
       }
       admin_save_queue: {
-        Args: { p_clinic: string; p_team: string; p_name: string; p_purpose: string; p_priority?: number; p_queue?: string }
+        Args: {
+          p_clinic: string
+          p_team: string
+          p_name: string
+          p_purpose: string
+          p_priority?: number
+          p_queue?: string
+        }
         Returns: string
       }
       admin_save_hours: {
-        Args: { p_clinic: string; p_weekday: number; p_opens: string; p_closes: string; p_team?: string; p_timezone?: string }
+        Args: {
+          p_clinic: string
+          p_weekday: number
+          p_opens: string
+          p_closes: string
+          p_team?: string
+          p_timezone?: string
+        }
         Returns: string
       }
       admin_save_closure: {
@@ -878,18 +886,22 @@ export type Database = {
       }
       admin_list_policy_versions: {
         Args: { p_clinic: string; p_queue: string }
-        Returns: { id: string; version: number; status: string; strategy: string; created_at: string }[]
+        Returns: {
+          id: string
+          version: number
+          status: string
+          strategy: string
+          created_at: string
+        }[]
       }
       has_clinic_role: {
         Args: { p_clinic: string; p_roles: string[] }
         Returns: boolean
       }
     }
-  }
-  Enums: {
-  [_ in never]: never
-}
->>>>>>>
+    Enums: {
+      [_ in never]: never
+    }
     CompositeTypes: {
       [_ in never]: never
     }
