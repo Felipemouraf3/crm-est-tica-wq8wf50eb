@@ -16,7 +16,6 @@ import AdminConhecimento from './pages/AdminConhecimento'
 import AdminAgentes from './pages/AdminAgentes'
 import Filas from './pages/Filas'
 import IdentificarPaciente from './pages/IdentificarPaciente'
->>>>>>>
 import Atendimento from './pages/Atendimento'
 import Conversa from './pages/Conversa'
 import SegundoFator from './pages/SegundoFator'
@@ -84,7 +83,6 @@ const App = () => (
               }
             />
             {/* P2-S02-T03: tela de busca — todos os papéis com vínculo ativo */}
->>>>>>>
             <Route path="/pacientes/identificar" element={<IdentificarPaciente />} />
             {/* P2-S04-T02: caixa de entrada e conversa em tempo real */}
             <Route path="/atendimento" element={<Atendimento />} />
