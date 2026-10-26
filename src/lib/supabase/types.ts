@@ -709,8 +709,8 @@ export type Database = {
       teams: {
         Row: {
           id: string
->>>>>>>
           clinic_id: string
+>>>>>>>
           name: string
           queue_type: string
           created_at: string

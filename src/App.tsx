@@ -63,8 +63,8 @@ const App = () => (
             {/* P2-S02-T03: tela de busca — todos os papéis com vínculo ativo */}
             <Route path="/pacientes/identificar" element={<IdentificarPaciente />} />
             {/* P2-S04-T02: caixa de entrada e conversa em tempo real */}
->>>>>>>
             <Route path="/atendimento" element={<Atendimento />} />
+>>>>>>>
             <Route path="/atendimento/:conversationId" element={<Conversa />} />
           </Route>
           <Route path="*" element={<NotFound />} />
