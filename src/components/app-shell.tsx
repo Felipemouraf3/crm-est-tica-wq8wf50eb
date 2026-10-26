@@ -1,10 +1,11 @@
-// src/components/app-shell.tsx — P2-S01-T03 + P2-S02-T03 + P2-S03-T01 + P2-S04-T02 + P2-S05-T01 + P2-S05-T03
+// src/components/app-shell.tsx — P2-S01-T03 + P2-S02-T03 + P2-S03-T01 + P2-S04-T02 + P2-S05-T01 + P2-S05-T03 + P2-S06-T03
 // Casca do app: menu lateral por papel + topo com seletor de clínica e chave de presença.
 // O menu é renderizado conforme o papel; o servidor revalida sempre (RLS).
 // P2-S04-T02: a clínica ativa vai por contexto para as telas (useClinicaAtiva).
 // P2-S05-T01: item "Filas e prazos" (owner/clinic_admin).
 // P2-S05-T03: item "Fila de atendimento" (/filas, todos) + chave "Disponível / Pausa"
 // com batimento a cada 30s enquanto a aba está aberta.
+// P2-S06-T03: itens "Conhecimento" e "Agentes" (owner/clinic_admin).
 import { useEffect, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '@/lib/supabase/client'
@@ -27,7 +28,6 @@ const ITENS: Item[] = [
 ]
 
 // P2-S05-T03: chave "Disponível / Pausa" — batimento a cada 30s enquanto a aba está aberta.
->>>>>>>
 function ChavePresenca({ clinicaAtiva }: { clinicaAtiva: string | null }) {
   const [estado, setEstado] = useState<'online' | 'away' | null>(null)
 
