@@ -25,9 +25,9 @@ const ITENS: Item[] = [
   { rota: '/admin/conhecimento', rotulo: 'Conhecimento', papeis: ['owner', 'clinic_admin'] },
   { rota: '/admin/agentes', rotulo: 'Agentes', papeis: ['owner', 'clinic_admin'] },
 ]
->>>>>>>
 
 // P2-S05-T03: chave "Disponível / Pausa" — batimento a cada 30s enquanto a aba está aberta.
+>>>>>>>
 function ChavePresenca({ clinicaAtiva }: { clinicaAtiva: string | null }) {
   const [estado, setEstado] = useState<'online' | 'away' | null>(null)
 
