@@ -51,6 +51,16 @@ const App = () => (
                 </RequireRole>
               }
             />
+            {/* P2-S05-T01: console de filas, horários e prazos (owner/clinic_admin + AAL2) */}
+            <Route
+              path="/admin/filas"
+              element={
+                <RequireRole papeis={['owner', 'clinic_admin']} exigeMfa>
+                  <AdminFilas />
+                </RequireRole>
+              }
+            />
+>>>>>>>
             {/* P2-S02-T03: tela de busca — todos os papéis com vínculo ativo */}
             <Route path="/pacientes/identificar" element={<IdentificarPaciente />} />
             {/* P2-S04-T02: caixa de entrada e conversa em tempo real */}

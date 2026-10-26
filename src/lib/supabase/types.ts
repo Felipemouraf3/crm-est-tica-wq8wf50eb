@@ -430,6 +430,8 @@ export type Database = {
           team_id: string
           user_id: string
           capacity: number
+          skills: string[]
+          max_concurrent: number
           active: boolean
           created_at: string
           updated_at: string
@@ -439,12 +441,272 @@ export type Database = {
           team_id: string
           user_id: string
           capacity?: number
+          skills?: string[]
+          max_concurrent?: number
           active?: boolean
           created_at?: string
           updated_at?: string
         }
         Update: Partial<Database['public']['Tables']['team_members']['Insert']>
       }
+      attendant_presence: {
+        Row: {
+          id: string
+          user_id: string
+          clinic_id: string
+          state: string
+          active_load: number
+          last_seen_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          clinic_id: string
+          state?: string
+          active_load?: number
+          last_seen_at?: string
+          updated_at?: string
+        }
+        Update: Partial<Database['public']['Tables']['attendant_presence']['Insert']>
+      }
+      business_closures: {
+        Row: {
+          id: string
+          clinic_id: string
+          date: string
+          reason: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          clinic_id: string
+          date: string
+          reason: string
+          created_at?: string
+        }
+        Update: Partial<Database['public']['Tables']['business_closures']['Insert']>
+      }
+      business_hours: {
+        Row: {
+          id: string
+          clinic_id: string
+          team_id: string | null
+          weekday: number
+          opens_at: string
+          closes_at: string
+          timezone: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          clinic_id: string
+          team_id?: string | null
+          weekday: number
+          opens_at: string
+          closes_at: string
+          timezone?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: Partial<Database['public']['Tables']['business_hours']['Insert']>
+      }
+      routing_policies: {
+        Row: {
+          id: string
+          clinic_id: string
+          queue_id: string
+          strategy: string
+          skills: string[]
+          accept_timeout_seconds: number
+          max_reoffers: number
+          first_response_sla_minutes: number
+          backup_queue_id: string | null
+          escalation_role: string
+          after_hours_text: string | null
+          fallback_mode: string
+          version: number
+          status: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          clinic_id: string
+          queue_id: string
+          strategy?: string
+          skills?: string[]
+          accept_timeout_seconds?: number
+          max_reoffers?: number
+          first_response_sla_minutes?: number
+          backup_queue_id?: string | null
+          escalation_role?: string
+          after_hours_text?: string | null
+          fallback_mode?: string
+          version?: number
+          status?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: Partial<Database['public']['Tables']['routing_policies']['Insert']>
+      }
+      ticket_events: {
+        Row: {
+          id: string
+          organization_id: string
+          clinic_id: string
+          ticket_id: string
+          event_type: string
+          from_user_id: string | null
+          to_user_id: string | null
+          reason_code: string | null
+          metadata_sanitized: Json
+          occurred_at: string
+        }
+        Insert: {
+          id?: string
+          organization_id: string
+          clinic_id: string
+          ticket_id: string
+          event_type: string
+          from_user_id?: string | null
+          to_user_id?: string | null
+          reason_code?: string | null
+          metadata_sanitized?: Json
+          occurred_at?: string
+        }
+        Update: Partial<Database['public']['Tables']['ticket_events']['Insert']>
+      }
+      ticket_queues: {
+        Row: {
+          id: string
+          organization_id: string
+          clinic_id: string
+          team_id: string
+          name: string
+          purpose: string
+          priority_default: number
+          active: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          organization_id: string
+          clinic_id: string
+          team_id: string
+          name: string
+          purpose: string
+          priority_default?: number
+          active?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: Partial<Database['public']['Tables']['ticket_queues']['Insert']>
+      }
+      ticket_sla_events: {
+        Row: {
+          id: string
+          organization_id: string
+          clinic_id: string
+          ticket_id: string
+          metric: string
+          due_at: string
+          breached_at: string | null
+          acknowledged_at: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          organization_id: string
+          clinic_id: string
+          ticket_id: string
+          metric: string
+          due_at: string
+          breached_at?: string | null
+          acknowledged_at?: string | null
+          created_at?: string
+        }
+        Update: Partial<Database['public']['Tables']['ticket_sla_events']['Insert']>
+      }
+      tickets: {
+        Row: {
+          id: string
+          organization_id: string
+          clinic_id: string
+          conversation_id: string
+          queue_id: string
+          status: string
+          priority: number
+          handoff_reason: string
+          intent: string | null
+          assigned_to: string | null
+          offered_to: string | null
+          offer_expires_at: string | null
+          reoffer_count: number
+          sla_due_at: string | null
+          accepted_at: string | null
+          first_response_at: string | null
+          resolved_at: string | null
+          resolution_code: string | null
+          resolution_note: string | null
+          next_action_at: string | null
+          version: number
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          organization_id: string
+          clinic_id: string
+          conversation_id: string
+          queue_id: string
+          status?: string
+          priority?: number
+          handoff_reason: string
+          intent?: string | null
+          assigned_to?: string | null
+          offered_to?: string | null
+          offer_expires_at?: string | null
+          reoffer_count?: number
+          sla_due_at?: string | null
+          accepted_at?: string | null
+          first_response_at?: string | null
+          resolved_at?: string | null
+          resolution_code?: string | null
+          resolution_note?: string | null
+          next_action_at?: string | null
+          version?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Update: Partial<Database['public']['Tables']['tickets']['Insert']>
+      }
+      user_shifts: {
+        Row: {
+          id: string
+          user_id: string
+          clinic_id: string
+          starts_at: string
+          ends_at: string
+          status: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          clinic_id: string
+          starts_at: string
+          ends_at: string
+          status?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: Partial<Database['public']['Tables']['user_shifts']['Insert']>
+      }
+>>>>>>>
       teams: {
         Row: {
           id: string
@@ -570,7 +832,60 @@ export type Database = {
         Args: { p_contact: string; p_clinic: string }
         Returns: void
       }
+      update_presence: {
+        Args: { p_clinic: string; p_state: string }
+        Returns: void
+      }
+      open_ticket: {
+        Args: { p_conversation: string; p_priority?: number; p_reason: string }
+        Returns: string
+      }
+      admin_save_queue: {
+        Args: { p_clinic: string; p_team: string; p_name: string; p_purpose: string; p_priority?: number; p_queue?: string }
+        Returns: string
+      }
+      admin_save_hours: {
+        Args: { p_clinic: string; p_weekday: number; p_opens: string; p_closes: string; p_team?: string; p_timezone?: string }
+        Returns: string
+      }
+      admin_save_closure: {
+        Args: { p_clinic: string; p_date: string; p_reason: string }
+        Returns: string
+      }
+      admin_save_policy: {
+        Args: {
+          p_clinic: string
+          p_queue: string
+          p_strategy: string
+          p_accept_timeout: number
+          p_max_reoffers: number
+          p_sla_minutes: number
+          p_backup_queue?: string
+          p_escalation_role?: string
+          p_after_hours_text?: string
+          p_fallback?: string
+          p_skills?: string[]
+        }
+        Returns: string
+      }
+      admin_publish_policy: {
+        Args: { p_clinic: string; p_policy: string }
+        Returns: number
+      }
+      admin_rollback_policy: {
+        Args: { p_clinic: string; p_queue: string }
+        Returns: number
+      }
+      admin_list_policy_versions: {
+        Args: { p_clinic: string; p_queue: string }
+        Returns: { id: string; version: number; status: string; strategy: string; created_at: string }[]
+      }
+      has_clinic_role: {
+        Args: { p_clinic: string; p_roles: string[] }
+        Returns: boolean
+      }
     }
+>>>>>>>
     Enums: {
       [_ in never]: never
     }
