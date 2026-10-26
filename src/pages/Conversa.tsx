@@ -7,7 +7,9 @@ import { Link, useParams } from 'react-router-dom'
 import { supabase } from '@/lib/supabase/client'
 import { AppShell } from '@/components/app-shell'
 import { RequireAuth, ErrorState } from '@/components/guards'
+import { PainelTicket } from '@/components/ticket-panel'
 import type { Papel } from '@/lib/supabase/types'
+>>>>>>>
 
 type Mensagem = {
   id: string
@@ -59,6 +61,8 @@ function mascara(e164: string | null): string {
 function Conversa() {
   const { conversationId } = useParams()
   const [papel, setPapel] = useState<Papel | null>(null)
+  const [meuId, setMeuId] = useState<string | null>(null)
+>>>>>>>
   const [conversa, setConversa] = useState<Conversa | null>(null)
   const [mensagens, setMensagens] = useState<Mensagem[]>([])
   const [eventos, setEventos] = useState<Evento[]>([])
@@ -93,6 +97,7 @@ function Conversa() {
     supabase.auth.getSession().then(({ data }) => {
       const user = data.session?.user
       if (!user) return
+      setMeuId(user.id)
       supabase
         .from('memberships')
         .select('role')
@@ -102,6 +107,7 @@ function Conversa() {
         .then(({ data: mem }) => setPapel((mem?.[0]?.role ?? null) as Papel | null))
     })
   }, [])
+>>>>>>>
 
   useEffect(() => {
     if (!conversationId) return
@@ -199,7 +205,9 @@ function Conversa() {
           Carregando…
         </div>
       ) : (
-        <div className="mt-2 flex h-[70vh] flex-col rounded-lg border border-[#F1E5C8] bg-white">
+        <div className="mt-2 grid gap-3 lg:grid-cols-[1fr_280px]">
+        <div className="flex h-[70vh] flex-col rounded-lg border border-[#F1E5C8] bg-white">
+>>>>>>>
           <div className="border-b border-[#F1E5C8] px-4 py-3">
             <div className="flex items-center justify-between">
               <div>
@@ -301,10 +309,15 @@ function Conversa() {
             </div>
           </div>
         </div>
+        <aside className="hidden lg:block">
+          <PainelTicket conversationId={conversationId ?? ''} meuId={meuId} />
+        </aside>
+        </div>
       )}
     </AppShell>
   )
 }
+>>>>>>>
 
 export default function ConversaComGuarda() {
   return (

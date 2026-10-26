@@ -12,6 +12,8 @@ import AdminProtegido from './pages/AdminProtegido'
 import AdminConexoes from './pages/AdminConexoes'
 import AdminCanais from './pages/AdminCanais'
 import AdminFilas from './pages/AdminFilas'
+import Filas from './pages/Filas'
+>>>>>>>
 import IdentificarPaciente from './pages/IdentificarPaciente'
 import Atendimento from './pages/Atendimento'
 import Conversa from './pages/Conversa'
@@ -66,6 +68,9 @@ const App = () => (
             {/* P2-S04-T02: caixa de entrada e conversa em tempo real */}
             <Route path="/atendimento" element={<Atendimento />} />
             <Route path="/atendimento/:conversationId" element={<Conversa />} />
+            {/* P2-S05-T03: visão do gestor da fila (todos os papéis; RPCs revalidam) */}
+            <Route path="/filas" element={<Filas />} />
+>>>>>>>
           </Route>
           <Route path="*" element={<NotFound />} />
         </Routes>

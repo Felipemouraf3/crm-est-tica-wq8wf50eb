@@ -19,9 +19,64 @@ const ITENS: Item[] = [
   { rota: '/admin/conexoes', rotulo: 'Conexões', papeis: ['owner', 'clinic_admin'] },
   { rota: '/admin/canais', rotulo: 'Canais WhatsApp', papeis: ['owner', 'clinic_admin'] },
   { rota: '/admin/filas', rotulo: 'Filas e prazos', papeis: ['owner', 'clinic_admin'] },
+  { rota: '/filas', rotulo: 'Fila de atendimento', papeis: 'todos' },
 ]
+>>>>>>>
+
+// P2-S05-T03: chave "Disponível / Pausa" — batimento a cada 30s enquanto a aba está aberta.
+function ChavePresenca({ clinicaAtiva }: { clinicaAtiva: string | null }) {
+  const [estado, setEstado] = useState<'online' | 'away' | null>(null)
+
+  useEffect(() => {
+    if (!clinicaAtiva) return
+    let vivo = true
+    supabase.auth.getSession().then(({ data }) => {
+      const user = data.session?.user
+      if (!user || !vivo) return
+      // estado atual
+      supabase
+        .from('attendant_presence')
+        .select('state')
+        .eq('user_id', user.id)
+        .eq('clinic_id', clinicaAtiva)
+        .maybeSingle()
+        .then(({ data: p }) => {
+          if (vivo && p) setEstado((p.state === 'away' ? 'away' : 'online'))
+        })
+    })
+    // batimento a cada 30s
+    const batimento = setInterval(() => {
+      if (!vivo || !clinicaAtiva) return
+      supabase.rpc('update_presence', { p_clinic: clinicaAtiva, p_state: estado ?? 'online' })
+    }, 30000)
+    return () => {
+      vivo = false
+      clearInterval(batimento)
+    }
+  }, [clinicaAtiva, estado])
+
+  if (!clinicaAtiva) return null
+  return (
+    <button
+      aria-label="Chave de presença"
+      onClick={() => {
+        const novo = estado === 'online' ? 'away' : 'online'
+        setEstado(novo)
+        void supabase.rpc('update_presence', { p_clinic: clinicaAtiva, p_state: novo })
+      }}
+      className={`rounded-full px-3 py-1 text-xs font-semibold ${
+        estado === 'online'
+          ? 'bg-green-100 text-green-800'
+          : 'bg-amber-100 text-amber-800'
+      }`}
+    >
+      {estado === 'online' ? 'Disponível' : 'Pausa'}
+    </button>
+  )
+}
 
 export function AppShell({ papel, children }: { papel: Papel | null; children: ReactNode }) {
+>>>>>>>
   const [clinicaAtiva, setClinicaAtiva] = useState<string | null>(null)
   const [email, setEmail] = useState('')
 
@@ -55,8 +110,12 @@ export function AppShell({ papel, children }: { papel: Papel | null; children: R
         <main className="flex-1 p-4">
           <header className="mb-4 flex items-center justify-between">
             <ClinicSelector value={clinicaAtiva} onChange={setClinicaAtiva} />
-            <span className="text-xs text-[#6B6560]">{email}</span>
+            <div className="flex items-center gap-3">
+              <ChavePresenca clinicaAtiva={clinicaAtiva} />
+              <span className="text-xs text-[#6B6560]">{email}</span>
+            </div>
           </header>
+>>>>>>>
           {children}
         </main>
       </div>
