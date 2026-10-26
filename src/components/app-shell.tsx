@@ -17,6 +17,8 @@ const ITENS: Item[] = [
   { rota: '/admin', rotulo: 'Administração', papeis: ['owner', 'clinic_admin'] },
   { rota: '/admin/conexoes', rotulo: 'Conexões', papeis: ['owner', 'clinic_admin'] },
   { rota: '/admin/canais', rotulo: 'Canais WhatsApp', papeis: ['owner', 'clinic_admin'] },
+  { rota: '/admin/filas', rotulo: 'Filas e prazos', papeis: ['owner', 'clinic_admin'] },
+>>>>>>>
 ]
 
 export function AppShell({ papel, children }: { papel: Papel | null; children: ReactNode }) {
