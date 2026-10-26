@@ -36,7 +36,6 @@ const SEL: Record<string, string> = {
 }
 
 function Atendimento() {
-  const { clinicaAtiva } = useClinicaAtiva()
   const [papel, setPapel] = useState<Papel | null>(null)
   const [conversas, setConversas] = useState<Conversa[] | null>(null)
 
@@ -53,6 +52,21 @@ function Atendimento() {
         .then(({ data: mem }) => setPapel((mem?.[0]?.role ?? null) as Papel | null))
     })
   }, [])
+
+  return (
+    <AppShell papel={papel}>
+      <AtendimentoConteudo />
+    </AppShell>
+  )
+}
+
+// Conteúdo lê o contexto DENTRO do AppShell (o provider vive no AppShell —
+// ler fora dele devolvia null sempre; bug do "Selecione uma clínica" com
+// clínica já selecionada, corrigido em 2026-10-26). A busca das conversas
+// também vive aqui (depende da clínica do contexto).
+function AtendimentoConteudo() {
+  const { clinicaAtiva } = useClinicaAtiva()
+  const [conversas, setConversas] = useState<Conversa[] | null>(null)
 
   useEffect(() => {
     if (!clinicaAtiva) return
@@ -92,7 +106,7 @@ function Atendimento() {
   }, [clinicaAtiva])
 
   return (
-    <AppShell papel={papel}>
+    <>
       <h1 className="font-serif text-xl font-bold text-[#2D2A26]">Atendimento</h1>
       {!clinicaAtiva ? (
         <div className="mt-4">
@@ -158,7 +172,7 @@ function Atendimento() {
           ))}
         </ul>
       )}
-    </AppShell>
+    </>
   )
 }
 
