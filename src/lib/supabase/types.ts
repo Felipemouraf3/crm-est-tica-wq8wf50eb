@@ -708,8 +708,8 @@ export type Database = {
       }
       teams: {
         Row: {
->>>>>>>
           id: string
+>>>>>>>
           clinic_id: string
           name: string
           queue_type: string
@@ -887,8 +887,9 @@ export type Database = {
     }
   }
   Enums: {
->>>>>>>      [_ in never]: never
-    }
+  [_ in never]: never
+}
+>>>>>>>
     CompositeTypes: {
       [_ in never]: never
     }
