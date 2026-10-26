@@ -19,6 +19,13 @@ type Mensagem = {
   occurred_at: string
 }
 
+type Anexo = {
+  message_id: string
+  storage_path: string
+  mime_detected: string | null
+  scan_status: string
+}
+
 type Evento = {
   id: string
   event_type: string
@@ -55,11 +62,32 @@ function Conversa() {
   const [conversa, setConversa] = useState<Conversa | null>(null)
   const [mensagens, setMensagens] = useState<Mensagem[]>([])
   const [eventos, setEventos] = useState<Evento[]>([])
+  const [anexos, setAnexos] = useState<Record<string, { url: string; scan: string }>>({})
   const [erro, setErro] = useState<string | null>(null)
   const [resposta, setResposta] = useState('')
   const [enviando, setEnviando] = useState(false)
   const [aviso, setAviso] = useState<string | null>(null)
   const fim = useRef<HTMLDivElement>(null)
+
+  // Anexos das mensagens: URL assinada (1h) + situação do antivírus (scan_status).
+  async function carregarAnexos(ids: string[]) {
+    if (!ids.length) {
+      setAnexos({})
+      return
+    }
+    const { data } = await supabase
+      .from('message_attachments')
+      .select('message_id, storage_path, mime_detected, scan_status')
+      .in('message_id', ids)
+    const mapa: Record<string, { url: string; scan: string }> = {}
+    for (const a of (data ?? []) as Anexo[]) {
+      const { data: s } = await supabase.storage
+        .from('attachments')
+        .createSignedUrl(a.storage_path, 3600)
+      if (s) mapa[a.message_id] = { url: s.signedUrl, scan: a.scan_status }
+    }
+    setAnexos(mapa)
+  }
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -105,6 +133,7 @@ function Conversa() {
       if (!vivo) return
       setMensagens((msgs.data ?? []) as Mensagem[])
       setEventos((evs.data ?? []) as Evento[])
+      void carregarAnexos((msgs.data ?? []).map((m: Mensagem) => m.id))
       // marca como lida (zera não lidas)
       await supabase.from('conversations').update({ unread_count: 0 }).eq('id', conversationId)
     })()
@@ -119,6 +148,7 @@ function Conversa() {
             .eq('conversation_id', conversationId)
             .order('occurred_at')
           if (vivo) setMensagens((data ?? []) as Mensagem[])
+          void carregarAnexos((data ?? []).map((m: Mensagem) => m.id))
         })()
       })
       .subscribe()
@@ -152,6 +182,7 @@ function Conversa() {
       .eq('conversation_id', conversationId)
       .order('occurred_at')
     setMensagens((data ?? []) as Mensagem[])
+    void carregarAnexos((data ?? []).map((m: Mensagem) => m.id))
   }
 
   return (
@@ -199,8 +230,30 @@ function Conversa() {
                       minha ? 'bg-[#B8960E] text-white' : 'bg-[#F1E5C8] text-[#2D2A26]'
                     }`}
                   >
+                    {anexos[m.id]?.url && m.content_type === 'image' && (
+                      <img
+                        src={anexos[m.id].url}
+                        alt="Anexo da mensagem"
+                        className="mb-1 max-h-64 w-auto rounded-lg"
+                      />
+                    )}
+                    {anexos[m.id]?.url && m.content_type !== 'image' && (
+                      <a
+                        href={anexos[m.id].url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-xs underline"
+                      >
+                        Abrir anexo ({m.content_type})
+                      </a>
+                    )}
+                    {anexos[m.id]?.scan === 'pending' && (
+                      <div className="mb-1 text-[10px] opacity-70">
+                        Antivírus: verificação pendente
+                      </div>
+                    )}
                     <div className="whitespace-pre-wrap break-words">
-                      {m.body ?? `[${m.content_type}]`}
+                      {m.body ?? (anexos[m.id]?.url ? '' : `[${m.content_type}]`)}
                     </div>
                     <div
                       className={`mt-1 text-right text-[10px] ${minha ? 'text-white/80' : 'text-[#6B6560]'}`}
