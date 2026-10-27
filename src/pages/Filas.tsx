@@ -71,6 +71,17 @@ export default function Filas() {
   const [dialogoAtribuir, setDialogoAtribuir] = useState<Ticket | null>(null)
   const [membros, setMembros] = useState<{ user_id: string; nome: string }[]>([])
   const [busy, setBusy] = useState(false)
+  // P2-S07-T03: indicador de uso do copiloto (taxas de aceitação/edição/rejeição)
+  const [stats, setStats] = useState<{
+    geradas: number
+    usadas: number
+    editadas: number
+    descartadas: number
+    bloqueadas: number
+    taxa_uso: number
+    taxa_edicao: number
+    taxa_rejeicao: number
+  } | null>(null)
 
   useEffect(() => {
     let vivo = true
@@ -92,7 +103,7 @@ export default function Filas() {
   }, [])
 
   const carregar = useCallback(async (clinic: string) => {
-    const [t, a] = await Promise.all([
+    const [t, a, st] = await Promise.all([
       supabase
         .from('tickets')
         .select(
@@ -105,9 +116,12 @@ export default function Filas() {
         .from('attendant_presence')
         .select('user_id, state, active_load, profiles(name)')
         .eq('clinic_id', clinic),
+      supabase.rpc('admin_sugestao_stats', { p_clinic: clinic, p_dias: 30 }),
     ])
     setTickets((t.data ?? []) as Ticket[])
     setAtendentes((a.data ?? []) as Atendente[])
+    const linha = Array.isArray(st.data) ? st.data[0] : st.data
+    setStats((linha ?? null) as typeof stats)
     setCarregando(false)
   }, [])
 
@@ -198,6 +212,14 @@ export default function Filas() {
           {mediana !== null ? `${Math.abs(Math.round(mediana))} min` : '—'} · Atendentes online:{' '}
           {atendentes.filter((a) => a.state === 'online').length}
         </p>
+        {stats && (
+          <p className="mt-1 text-xs text-[#6B6560]" data-testid="copiloto-stats">
+            Copiloto (30 dias): {stats.geradas} geradas · {stats.usadas} usadas (
+            {stats.taxa_uso ?? 0}%) · {stats.editadas} editadas ({stats.taxa_edicao ?? 0}%) ·{' '}
+            {stats.descartadas} descartadas ({stats.taxa_rejeicao ?? 0}%) · {stats.bloqueadas}{' '}
+            bloqueadas
+          </p>
+        )}
       </div>
 
       {/* atendentes online e carga */}
