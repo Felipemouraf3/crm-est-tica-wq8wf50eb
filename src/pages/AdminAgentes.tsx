@@ -29,6 +29,7 @@ type Versao = {
   sandbox_ok: boolean
   published_at: string | null
   created_at: string
+  origem: 'propria' | 'organizacao'
 }
 
 type Efetivo = {
@@ -54,6 +55,8 @@ const INTENCOES = [
 const ROTULO_INTENCAO = Object.fromEntries(INTENCOES.map((i) => [i.v, i.t]))
 
 const VARIAVEIS = ['clinica', 'nome_contato', 'horario_clinica']
+// chave do agente do copiloto no banco (prompt_sets.agent_key = AG-01)
+const AGENTE_COPILOTO = 'AG-01'
 
 export default function AdminAgentes() {
   const { toast } = useToast()
@@ -119,16 +122,16 @@ export default function AdminAgentes() {
   const carregarInstrucoes = useCallback(async (clinic: string) => {
     const { data: ef } = await supabase.rpc('admin_get_prompt_efetivo', {
       p_clinic: clinic,
-      p_agent_key: 'AG-14',
+      p_agent_key: AGENTE_COPILOTO,
     })
     const linha = Array.isArray(ef) ? ef[0] : ef
     setEfetivo((linha ?? null) as Efetivo | null)
     const { data: vs } = await supabase.rpc('admin_list_prompt_versions', {
       p_clinic: clinic,
-      p_agent_key: 'AG-14',
+      p_agent_key: AGENTE_COPILOTO,
     })
     setVersoes((vs ?? []) as Versao[])
-    // rascunho aberto (se existir) vira o texto do editor
+    // rascunho aberto (se existir) vira o texto do editor; senão, o texto em uso
     const rascunho = (vs ?? []).find((v: Versao) => v.status === 'draft')
     if (rascunho) {
       setRascunhoId(rascunho.id)
@@ -140,7 +143,7 @@ export default function AdminAgentes() {
       setTexto(c?.content ?? '')
     } else {
       setRascunhoId(null)
-      setTexto('')
+      setTexto(linha?.content ?? '')
     }
     setSandbox(null)
   }, [])
@@ -200,7 +203,7 @@ export default function AdminAgentes() {
     setBusy(true)
     const { data, error } = await supabase.rpc('admin_save_prompt_draft', {
       p_clinic: clinicaAtiva,
-      p_agent_key: 'AG-14',
+      p_agent_key: AGENTE_COPILOTO,
       p_content: texto.trim(),
     })
     setBusy(false)
@@ -268,7 +271,7 @@ export default function AdminAgentes() {
     setBusy(true)
     const { data, error } = await supabase.rpc('admin_rollback_prompt_version', {
       p_clinic: clinicaAtiva,
-      p_agent_key: 'AG-14',
+      p_agent_key: AGENTE_COPILOTO,
     })
     setBusy(false)
     if (error) {
@@ -438,11 +441,18 @@ export default function AdminAgentes() {
               <span className="text-[#6B6560]">versão {efetivo.version} em uso pelo copiloto</span>
             </div>
           )}
+          {!efetivo && (
+            <p className="text-xs text-[#D93025]" data-testid="origem-prompt">
+              Nenhum prompt publicado encontrado para este agente ({AGENTE_COPILOTO}).
+            </p>
+          )}
 
           {/* editor */}
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-serif">Instruções do copiloto (AG-14)</CardTitle>
+              <CardTitle className="text-sm font-serif">
+                Instruções do copiloto ({AGENTE_COPILOTO})
+              </CardTitle>
             </CardHeader>
             <CardContent>
               <p className="mb-2 text-xs text-[#6B6560]">
@@ -452,9 +462,9 @@ export default function AdminAgentes() {
                 aria-label="Instruções do copiloto"
                 value={texto}
                 onChange={(e) => setTexto(e.target.value)}
-                rows={8}
-                placeholder={efetivo?.content ?? 'Escreva as instruções do copiloto…'}
-                className="w-full resize-none rounded-lg border border-[#F1E5C8] px-3 py-2 text-sm text-[#2D2A26] focus:outline-none focus:ring-1 focus:ring-[#B8960E]"
+                rows={10}
+                data-testid="editor-prompt"
+                className="w-full resize-y rounded-lg border border-[#F1E5C8] px-3 py-2 font-mono text-xs text-[#2D2A26] focus:outline-none focus:ring-1 focus:ring-[#B8960E]"
               />
               <div className="mt-2 flex flex-wrap gap-2">
                 <Button size="sm" onClick={salvarRascunho} disabled={busy || !texto.trim()}>
@@ -499,6 +509,7 @@ export default function AdminAgentes() {
                 <table className="w-full text-xs">
                   <thead>
                     <tr className="text-left text-[#6B6560]">
+                      <th className="pb-2">Origem</th>
                       <th className="pb-2">Versão</th>
                       <th className="pb-2">Situação</th>
                       <th className="pb-2">Sandbox</th>
@@ -508,6 +519,9 @@ export default function AdminAgentes() {
                   <tbody>
                     {versoes.map((v) => (
                       <tr key={v.id} className="border-t border-[#F1E5C8]">
+                        <td className="py-2">
+                          {v.origem === 'propria' ? 'Clínica' : 'Organização'}
+                        </td>
                         <td className="py-2">v{v.version}</td>
                         <td className="py-2">
                           <Badge
