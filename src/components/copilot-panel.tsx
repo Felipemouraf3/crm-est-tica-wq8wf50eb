@@ -117,28 +117,17 @@ export function PainelCopiloto({ conversationId }: { conversationId: string }) {
     setGerando(true)
     setIndisponivel(null)
     setSugestao(null)
-    const { data: sessao } = await supabase.auth.getSession()
-    const token = sessao.session?.access_token
-    if (!token) {
-      setGerando(false)
-      setIndisponivel('Sessão expirada — entre novamente')
-      return
-    }
-    const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ticket-suggest-action`
-    const resp = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ ticket_id: ticket.id }),
+    const { data, error } = await supabase.functions.invoke('ticket-suggest-action', {
+      body: { ticket_id: ticket.id },
     })
     setGerando(false)
-    if (!resp.ok) {
+    if (error || !data) {
       setIndisponivel('Sugestões indisponíveis no momento')
       return
     }
-    const corpo = (await resp.json()) as {
+    const d = data as {
       data?: { disponivel?: boolean; motivo_indisponivel?: string } & Sugestao
-    }
-    const d = corpo?.data
+    }['data']
     if (!d || d.disponivel === false) {
       setIndisponivel('Sugestões indisponíveis no momento')
       return
