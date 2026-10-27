@@ -9,6 +9,7 @@ import { supabase } from '@/lib/supabase/client'
 import { AppShell } from '@/components/app-shell'
 import { RequireAuth, ErrorState } from '@/components/guards'
 import { PainelTicket } from '@/components/ticket-panel'
+import { PainelCopiloto } from '@/components/copilot-panel'
 import type { Papel } from '@/lib/supabase/types'
 
 type Mensagem = {
@@ -311,6 +312,9 @@ function Conversa() {
           </div>
           <aside className="hidden lg:block">
             <PainelTicket conversationId={conversationId ?? ''} meuId={meuId} />
+            <div className="mt-3">
+              <PainelCopiloto conversationId={conversationId ?? ''} />
+            </div>
           </aside>
         </div>
       )}
