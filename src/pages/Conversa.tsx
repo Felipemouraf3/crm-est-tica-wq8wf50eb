@@ -310,7 +310,10 @@ function Conversa() {
               </div>
             </div>
           </div>
-          <aside className="hidden max-h-[70vh] overflow-y-auto pr-1 lg:block">
+          <aside
+            className="hidden overflow-y-auto pr-1 lg:block"
+            style={{ maxHeight: '70vh', overflowY: 'auto' }}
+          >
             <PainelTicket conversationId={conversationId ?? ''} meuId={meuId} />
             <div className="mt-3">
               <PainelCopiloto conversationId={conversationId ?? ''} />
