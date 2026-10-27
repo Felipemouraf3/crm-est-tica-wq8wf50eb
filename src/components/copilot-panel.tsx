@@ -125,9 +125,13 @@ export function PainelCopiloto({ conversationId }: { conversationId: string }) {
       setIndisponivel('Sugestões indisponíveis no momento')
       return
     }
-    const d = data as {
-      data?: { disponivel?: boolean; motivo_indisponivel?: string } & Sugestao
-    }['data']
+    // functions.invoke devolve o corpo { data: {...}, correlation_id } — aceitar os dois formatos
+    const bruto = data as
+      | { data?: { disponivel?: boolean } & Sugestao }
+      | ({ disponivel?: boolean } & Sugestao)
+    const d = ('data' in bruto && bruto.data ? bruto.data : bruto) as {
+      disponivel?: boolean
+    } & Sugestao
     if (!d || d.disponivel === false) {
       setIndisponivel('Sugestões indisponíveis no momento')
       return
