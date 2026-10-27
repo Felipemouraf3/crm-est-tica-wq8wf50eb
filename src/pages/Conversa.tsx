@@ -204,7 +204,7 @@ function Conversa() {
           Carregando…
         </div>
       ) : (
-        <div className="mt-2 grid gap-3 lg:grid-cols-[1fr_280px]">
+        <div className="mt-2 grid items-start gap-3 lg:grid-cols-[1fr_320px]">
           <div className="flex h-[70vh] flex-col rounded-lg border border-[#F1E5C8] bg-white">
             <div className="border-b border-[#F1E5C8] px-4 py-3">
               <div className="flex items-center justify-between">
@@ -310,7 +310,7 @@ function Conversa() {
               </div>
             </div>
           </div>
-          <aside className="hidden lg:block">
+          <aside className="hidden max-h-[70vh] overflow-y-auto pr-1 lg:block">
             <PainelTicket conversationId={conversationId ?? ''} meuId={meuId} />
             <div className="mt-3">
               <PainelCopiloto conversationId={conversationId ?? ''} />
