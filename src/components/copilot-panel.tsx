@@ -267,6 +267,39 @@ export function PainelCopiloto({ conversationId }: { conversationId: string }) {
                   >
                     {sugestao.resposta_sugerida}
                   </p>
+                  {sugestao.status === 'generated' && (
+                    <div className="mt-2 flex flex-wrap gap-2" data-testid="copiloto-acoes">
+                      <Button
+                        size="sm"
+                        onClick={() => void aplicar('use')}
+                        disabled={aplicando}
+                        data-testid="usar-sugestao"
+                      >
+                        Usar
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          setTextoEditado(sugestao.resposta_sugerida ?? '')
+                          setDialogoEditar(true)
+                        }}
+                        disabled={aplicando}
+                        data-testid="editar-sugestao"
+                      >
+                        Editar e enviar
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => void aplicar('discard')}
+                        disabled={aplicando}
+                        data-testid="descartar-sugestao"
+                      >
+                        Descartar
+                      </Button>
+                    </div>
+                  )}
                 </div>
               )}
               <div>
@@ -309,39 +342,6 @@ export function PainelCopiloto({ conversationId }: { conversationId: string }) {
               <p className="text-[10px] text-[#9CA3AF]">
                 Confiança {Math.round(sugestao.confianca * 100)}% · gerar nunca envia
               </p>
-              {sugestao.status === 'generated' && sugestao.resposta_sugerida && (
-                <div className="flex flex-wrap gap-2" data-testid="copiloto-acoes">
-                  <Button
-                    size="sm"
-                    onClick={() => void aplicar('use')}
-                    disabled={aplicando}
-                    data-testid="usar-sugestao"
-                  >
-                    Usar
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => {
-                      setTextoEditado(sugestao.resposta_sugerida ?? '')
-                      setDialogoEditar(true)
-                    }}
-                    disabled={aplicando}
-                    data-testid="editar-sugestao"
-                  >
-                    Editar e enviar
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => void aplicar('discard')}
-                    disabled={aplicando}
-                    data-testid="descartar-sugestao"
-                  >
-                    Descartar
-                  </Button>
-                </div>
-              )}
               {sugestao.status === 'blocked' && (
                 <Button
                   size="sm"
