@@ -324,96 +324,115 @@ export default function AdminCanais() {
       {/* cadastro / edição */}
       <Dialog open={dialogo} onOpenChange={(v) => (v ? setDialogo(true) : fecharDialogo())}>
         <DialogContent className="max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>
-              {editando ? 'Editar número de WhatsApp' : 'Novo número de WhatsApp'}
-            </DialogTitle>
-          </DialogHeader>
-          <div className="flex gap-2">
-            {(['meta_cloud', 'z_api'] as const).map((p) => (
-              <button
-                key={p}
-                onClick={() => !editando && setProvider(p)}
-                disabled={!!editando && provider !== p}
-                className={`rounded-lg border px-3 py-1.5 text-xs font-semibold disabled:opacity-40 ${
-                  provider === p
-                    ? 'border-[#D4AF37] bg-[#FFF8ED] text-[#B8960E]'
-                    : 'border-[#F1E5C8] text-[#6B6560]'
-                }`}
-              >
-                {p === 'meta_cloud' ? 'Meta Cloud API' : 'Z-API'}
-              </button>
-            ))}
-          </div>
-          {editando && (
+          {/* autoComplete=off no form + nomes irregulares nos segredos: impede o
+              navegador de injetar e-mail/senha salvos nos campos de segredo
+              (aconteceu em 27/10: o gerenciador preencheu o campo do token). */}
+          <form autoComplete="off" onSubmit={(e) => e.preventDefault()}>
+            <DialogHeader>
+              <DialogTitle>
+                {editando ? 'Editar número de WhatsApp' : 'Novo número de WhatsApp'}
+              </DialogTitle>
+            </DialogHeader>
+            <div className="flex gap-2">
+              {(['meta_cloud', 'z_api'] as const).map((p) => (
+                <button
+                  key={p}
+                  onClick={() => !editando && setProvider(p)}
+                  disabled={!!editando && provider !== p}
+                  className={`rounded-lg border px-3 py-1.5 text-xs font-semibold disabled:opacity-40 ${
+                    provider === p
+                      ? 'border-[#D4AF37] bg-[#FFF8ED] text-[#B8960E]'
+                      : 'border-[#F1E5C8] text-[#6B6560]'
+                  }`}
+                >
+                  {p === 'meta_cloud' ? 'Meta Cloud API' : 'Z-API'}
+                </button>
+              ))}
+            </div>
+            {editando && (
+              <p className="text-xs text-[#6B6560]">
+                Editando{' '}
+                <strong>{editando.provider === 'meta_cloud' ? 'Meta Cloud API' : 'Z-API'}</strong> ·
+                ID externo <strong>{editando.external_account_id}</strong>. O ID externo não pode
+                ser alterado — para trocar, crie um canal novo.
+              </p>
+            )}
+            <label className="text-xs font-semibold">Número (qualquer formato)</label>
+            <Input
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              placeholder="(81) 99999-0001"
+            />
+            <label className="text-xs font-semibold">Nome exibido (opcional)</label>
+            <Input
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+              placeholder="PS Caruaru — WhatsApp"
+            />
+            <label className="text-xs font-semibold">
+              {provider === 'meta_cloud' ? 'Phone Number ID (Meta)' : 'Instance ID (Z-API)'}
+            </label>
+            <Input
+              value={externalId}
+              onChange={(e) => setExternalId(e.target.value)}
+              disabled={!!editando}
+            />
+            {provider === 'meta_cloud' && (
+              <>
+                <label className="text-xs font-semibold">
+                  ID da conta comercial (WABA, opcional)
+                </label>
+                <Input value={businessId} onChange={(e) => setBusinessId(e.target.value)} />
+              </>
+            )}
+            <label className="text-xs font-semibold">
+              {provider === 'meta_cloud' ? 'Token de acesso permanente' : 'Token da instância'}
+            </label>
+            <Input
+              type="password"
+              name="ps-canal-token-x7"
+              value={token}
+              onChange={(e) => setToken(e.target.value)}
+              autoComplete="new-password"
+              autoCorrect="off"
+              autoCapitalize="off"
+              spellCheck={false}
+              data-lpignore="true"
+              data-1p-ignore
+              data-form-type="other"
+              placeholder={editando ? 'deixe em branco para manter o atual' : ''}
+            />
+            <label className="text-xs font-semibold">
+              {provider === 'meta_cloud' ? 'App Secret (Meta)' : 'Client-Token (Z-API)'}
+            </label>
+            <Input
+              type="password"
+              name="ps-canal-appsecret-x7"
+              value={segundoSegredo}
+              onChange={(e) => setSegundoSegredo(e.target.value)}
+              autoComplete="new-password"
+              autoCorrect="off"
+              autoCapitalize="off"
+              spellCheck={false}
+              data-lpignore="true"
+              data-1p-ignore
+              data-form-type="other"
+              placeholder={editando ? 'deixe em branco para manter o atual' : ''}
+            />
             <p className="text-xs text-[#6B6560]">
-              Editando{' '}
-              <strong>{editando.provider === 'meta_cloud' ? 'Meta Cloud API' : 'Z-API'}</strong> ·
-              ID externo <strong>{editando.external_account_id}</strong>. O ID externo não pode ser
-              alterado — para trocar, crie um canal novo.
+              Os segredos vão direto para o cofre (Vault) e nunca voltam a ser exibidos.
+              {editando &&
+                ' Ao editar, deixe um campo de segredo em branco para manter o valor atual.'}
             </p>
-          )}
-          <label className="text-xs font-semibold">Número (qualquer formato)</label>
-          <Input
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-            placeholder="(81) 99999-0001"
-          />
-          <label className="text-xs font-semibold">Nome exibido (opcional)</label>
-          <Input
-            value={displayName}
-            onChange={(e) => setDisplayName(e.target.value)}
-            placeholder="PS Caruaru — WhatsApp"
-          />
-          <label className="text-xs font-semibold">
-            {provider === 'meta_cloud' ? 'Phone Number ID (Meta)' : 'Instance ID (Z-API)'}
-          </label>
-          <Input
-            value={externalId}
-            onChange={(e) => setExternalId(e.target.value)}
-            disabled={!!editando}
-          />
-          {provider === 'meta_cloud' && (
-            <>
-              <label className="text-xs font-semibold">
-                ID da conta comercial (WABA, opcional)
-              </label>
-              <Input value={businessId} onChange={(e) => setBusinessId(e.target.value)} />
-            </>
-          )}
-          <label className="text-xs font-semibold">
-            {provider === 'meta_cloud' ? 'Token de acesso permanente' : 'Token da instância'}
-          </label>
-          <Input
-            type="password"
-            value={token}
-            onChange={(e) => setToken(e.target.value)}
-            autoComplete="off"
-            placeholder={editando ? 'deixe em branco para manter o atual' : ''}
-          />
-          <label className="text-xs font-semibold">
-            {provider === 'meta_cloud' ? 'App Secret (Meta)' : 'Client-Token (Z-API)'}
-          </label>
-          <Input
-            type="password"
-            value={segundoSegredo}
-            onChange={(e) => setSegundoSegredo(e.target.value)}
-            autoComplete="off"
-            placeholder={editando ? 'deixe em branco para manter o atual' : ''}
-          />
-          <p className="text-xs text-[#6B6560]">
-            Os segredos vão direto para o cofre (Vault) e nunca voltam a ser exibidos.
-            {editando &&
-              ' Ao editar, deixe um campo de segredo em branco para manter o valor atual.'}
-          </p>
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" size="sm" onClick={fecharDialogo}>
-              Cancelar
-            </Button>
-            <Button size="sm" onClick={salvarCanal} disabled={salvando}>
-              {salvando ? 'Gravando…' : 'Gravar'}
-            </Button>
-          </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" size="sm" onClick={fecharDialogo}>
+                Cancelar
+              </Button>
+              <Button size="sm" onClick={salvarCanal} disabled={salvando}>
+                {salvando ? 'Gravando…' : 'Gravar'}
+              </Button>
+            </div>
+          </form>
         </DialogContent>
       </Dialog>
 
