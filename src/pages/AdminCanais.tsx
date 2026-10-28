@@ -1,5 +1,5 @@
-// src/pages/AdminCanais.tsx — P2-S03-T01
-// Tela /admin/canais: lista de números, cadastro Meta/Z-API, teste de
+// src/pages/AdminCanais.tsx — P2-S03-T01 (+ edição na T02c, 27/10)
+// Tela /admin/canais: lista de números, cadastro Meta/Z-API, edição, teste de
 // conexão, pausar/reativar/desativar. Segredos NUNCA reaparecem — o
 // verify_token/URL do webhook é mostrado uma única vez (SPEC).
 import { useEffect, useState } from 'react'
@@ -10,7 +10,15 @@ import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { MessageSquare, Plus, RefreshCw, PauseCircle, PlayCircle, ShieldOff } from 'lucide-react'
+import {
+  MessageSquare,
+  Plus,
+  RefreshCw,
+  PauseCircle,
+  PlayCircle,
+  ShieldOff,
+  Pencil,
+} from 'lucide-react'
 import type { Database } from '@/lib/supabase/types'
 
 type Canal = Database['public']['Tables']['channel_accounts']['Row']
@@ -46,6 +54,8 @@ export default function AdminCanais() {
   const [segredoUnico, setSegredoUnico] = useState<{ titulo: string; valor: string } | null>(null)
   const [testando, setTestando] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  // Edição (T02c): mesmo diálogo; segredos em branco = manter o atual.
+  const [editando, setEditando] = useState<Canal | null>(null)
 
   async function carregar(clinic: string, vivo = true) {
     const { data } = await supabase
@@ -84,9 +94,48 @@ export default function AdminCanais() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  function limparFormulario() {
+    setPhone('')
+    setDisplayName('')
+    setExternalId('')
+    setBusinessId('')
+    setToken('')
+    setSegundoSegredo('')
+  }
+
+  function abrirNovo() {
+    setEditando(null)
+    setProvider('meta_cloud')
+    limparFormulario()
+    setDialogo(true)
+  }
+
+  function abrirEdicao(c: Canal) {
+    setEditando(c)
+    setProvider(c.provider === 'z_api' ? 'z_api' : 'meta_cloud')
+    setPhone(c.phone_e164 ?? '')
+    setDisplayName(c.display_name ?? '')
+    setExternalId(c.external_account_id ?? '')
+    setBusinessId(c.external_business_id ?? '')
+    // Segredos nunca voltam da API: em branco significa "manter o atual".
+    setToken('')
+    setSegundoSegredo('')
+    setDialogo(true)
+  }
+
+  function fecharDialogo() {
+    setDialogo(false)
+    setEditando(null)
+    limparFormulario()
+  }
+
   async function salvarCanal() {
-    if (!clinicaId || !phone.trim() || !externalId.trim() || !token.trim()) {
-      toast({ title: 'Preencha número, ID externo e token', variant: 'destructive' })
+    if (!clinicaId || !phone.trim() || !externalId.trim()) {
+      toast({ title: 'Preencha número e ID externo', variant: 'destructive' })
+      return
+    }
+    if (!editando && !token.trim()) {
+      toast({ title: 'Informe o token do canal', variant: 'destructive' })
       return
     }
     setSalvando(true)
@@ -98,7 +147,8 @@ export default function AdminCanais() {
         p_display_name: displayName.trim() || null,
         p_external_account_id: externalId.trim(),
         p_external_business_id: provider === 'meta_cloud' ? businessId.trim() || null : null,
-        p_token: token.trim(),
+        // Em branco na edição = manter o segredo atual (a API nunca devolve).
+        p_token: token.trim() || null,
         p_second_secret: segundoSegredo.trim() || null,
       })
       if (error) throw error
@@ -111,13 +161,7 @@ export default function AdminCanais() {
             : 'Segredo do webhook Z-API (use na URL configurada na Z-API)',
         valor: String(r?.webhook_secret_once ?? ''),
       })
-      setDialogo(false)
-      setPhone('')
-      setDisplayName('')
-      setExternalId('')
-      setBusinessId('')
-      setToken('')
-      setSegundoSegredo('')
+      fecharDialogo()
       toast({ title: r?.created ? 'Canal criado' : 'Canal atualizado' })
       await carregar(clinicaId)
     } catch (e) {
@@ -177,7 +221,7 @@ export default function AdminCanais() {
             Clínica: <strong>{clinicaNome || '…'}</strong>
           </p>
         </div>
-        <Button size="sm" onClick={() => setDialogo(true)} disabled={!clinicaId}>
+        <Button size="sm" onClick={abrirNovo} disabled={!clinicaId}>
           <Plus className="mr-1 h-4 w-4" /> Novo número
         </Button>
       </div>
@@ -220,6 +264,14 @@ export default function AdminCanais() {
                     )}
                   </p>
                   <div className="mt-3 flex flex-wrap gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => abrirEdicao(c)}
+                      disabled={busy}
+                    >
+                      <Pencil className="mr-1 h-3.5 w-3.5" /> Editar
+                    </Button>
                     <Button
                       size="sm"
                       variant="outline"
@@ -269,18 +321,21 @@ export default function AdminCanais() {
         </div>
       )}
 
-      {/* cadastro */}
-      <Dialog open={dialogo} onOpenChange={setDialogo}>
+      {/* cadastro / edição */}
+      <Dialog open={dialogo} onOpenChange={(v) => (v ? setDialogo(true) : fecharDialogo())}>
         <DialogContent className="max-h-[85vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Novo número de WhatsApp</DialogTitle>
+            <DialogTitle>
+              {editando ? 'Editar número de WhatsApp' : 'Novo número de WhatsApp'}
+            </DialogTitle>
           </DialogHeader>
           <div className="flex gap-2">
             {(['meta_cloud', 'z_api'] as const).map((p) => (
               <button
                 key={p}
-                onClick={() => setProvider(p)}
-                className={`rounded-lg border px-3 py-1.5 text-xs font-semibold ${
+                onClick={() => !editando && setProvider(p)}
+                disabled={!!editando && provider !== p}
+                className={`rounded-lg border px-3 py-1.5 text-xs font-semibold disabled:opacity-40 ${
                   provider === p
                     ? 'border-[#D4AF37] bg-[#FFF8ED] text-[#B8960E]'
                     : 'border-[#F1E5C8] text-[#6B6560]'
@@ -290,6 +345,14 @@ export default function AdminCanais() {
               </button>
             ))}
           </div>
+          {editando && (
+            <p className="text-xs text-[#6B6560]">
+              Editando{' '}
+              <strong>{editando.provider === 'meta_cloud' ? 'Meta Cloud API' : 'Z-API'}</strong> ·
+              ID externo <strong>{editando.external_account_id}</strong>. O ID externo não pode ser
+              alterado — para trocar, crie um canal novo.
+            </p>
+          )}
           <label className="text-xs font-semibold">Número (qualquer formato)</label>
           <Input
             value={phone}
@@ -305,7 +368,11 @@ export default function AdminCanais() {
           <label className="text-xs font-semibold">
             {provider === 'meta_cloud' ? 'Phone Number ID (Meta)' : 'Instance ID (Z-API)'}
           </label>
-          <Input value={externalId} onChange={(e) => setExternalId(e.target.value)} />
+          <Input
+            value={externalId}
+            onChange={(e) => setExternalId(e.target.value)}
+            disabled={!!editando}
+          />
           {provider === 'meta_cloud' && (
             <>
               <label className="text-xs font-semibold">
@@ -322,6 +389,7 @@ export default function AdminCanais() {
             value={token}
             onChange={(e) => setToken(e.target.value)}
             autoComplete="off"
+            placeholder={editando ? 'deixe em branco para manter o atual' : ''}
           />
           <label className="text-xs font-semibold">
             {provider === 'meta_cloud' ? 'App Secret (Meta)' : 'Client-Token (Z-API)'}
@@ -331,12 +399,15 @@ export default function AdminCanais() {
             value={segundoSegredo}
             onChange={(e) => setSegundoSegredo(e.target.value)}
             autoComplete="off"
+            placeholder={editando ? 'deixe em branco para manter o atual' : ''}
           />
           <p className="text-xs text-[#6B6560]">
             Os segredos vão direto para o cofre (Vault) e nunca voltam a ser exibidos.
+            {editando &&
+              ' Ao editar, deixe um campo de segredo em branco para manter o valor atual.'}
           </p>
           <div className="flex justify-end gap-2">
-            <Button variant="outline" size="sm" onClick={() => setDialogo(false)}>
+            <Button variant="outline" size="sm" onClick={fecharDialogo}>
               Cancelar
             </Button>
             <Button size="sm" onClick={salvarCanal} disabled={salvando}>
