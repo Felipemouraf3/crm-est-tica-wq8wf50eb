@@ -283,7 +283,7 @@ export default function AdminCanais() {
                       />
                       {testando === c.id ? 'Testando…' : 'Testar conexão'}
                     </Button>
-                    {c.status === 'active' && (
+                    {c.status === 'active' ? (
                       <Button
                         size="sm"
                         variant="outline"
@@ -292,15 +292,18 @@ export default function AdminCanais() {
                       >
                         <PauseCircle className="mr-1 h-3.5 w-3.5" /> Pausar
                       </Button>
-                    )}
-                    {c.status === 'paused' && (
+                    ) : (
+                      /* Rascunho, pausado e desativado precisam poder ATIVAR.
+                         Antes só 'paused' mostrava Reativar: quem desativava
+                         (ou ficava em rascunho) não tinha como ativar. */
                       <Button
                         size="sm"
                         variant="outline"
                         disabled={busy}
                         onClick={() => mudarStatus(c, 'active')}
                       >
-                        <PlayCircle className="mr-1 h-3.5 w-3.5" /> Reativar
+                        <PlayCircle className="mr-1 h-3.5 w-3.5" />{' '}
+                        {c.status === 'draft' ? 'Ativar' : 'Reativar'}
                       </Button>
                     )}
                     {c.status !== 'disabled' && (
