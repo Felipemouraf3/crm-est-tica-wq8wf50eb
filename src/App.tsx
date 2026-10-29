@@ -14,6 +14,7 @@ import AdminCanais from './pages/AdminCanais'
 import AdminFilas from './pages/AdminFilas'
 import AdminConhecimento from './pages/AdminConhecimento'
 import AdminAgentes from './pages/AdminAgentes'
+import AdminDadosExperts from './pages/AdminDadosExperts'
 import Filas from './pages/Filas'
 import IdentificarPaciente from './pages/IdentificarPaciente'
 import Atendimento from './pages/Atendimento'
@@ -79,6 +80,15 @@ const App = () => (
               element={
                 <RequireRole papeis={['owner', 'clinic_admin']} exigeMfa>
                   <AdminAgentes />
+                </RequireRole>
+              }
+            />
+            {/* P3-S01-T01: dados do Clínica Experts (owner/clinic_admin + AAL2) */}
+            <Route
+              path="/admin/dados-experts"
+              element={
+                <RequireRole papeis={['owner', 'clinic_admin']} exigeMfa>
+                  <AdminDadosExperts />
                 </RequireRole>
               }
             />
