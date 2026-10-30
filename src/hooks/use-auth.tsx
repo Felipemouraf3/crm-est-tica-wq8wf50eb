@@ -173,8 +173,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const resetPassword = async (email: string) => {
     const trimmedEmail = email.trim().toLowerCase()
+    // item 1 (29/10): o link precisa cair na tela de redefinição, não na raiz.
+    // Antes ia para `/`, onde o fragmento com o token era ignorado e o usuário
+    // voltava ao login sem conseguir trocar a senha.
     const { error } = await supabase.auth.resetPasswordForEmail(trimmedEmail, {
-      redirectTo: `${window.location.origin}/`,
+      redirectTo: `${window.location.origin}/redefinir-senha`,
     })
 
     return { error }

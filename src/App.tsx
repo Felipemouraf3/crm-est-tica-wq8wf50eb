@@ -15,6 +15,7 @@ import AdminFilas from './pages/AdminFilas'
 import AdminConhecimento from './pages/AdminConhecimento'
 import AdminAgentes from './pages/AdminAgentes'
 import AdminDadosExperts from './pages/AdminDadosExperts'
+import RedefinirSenha from './pages/RedefinirSenha'
 import Filas from './pages/Filas'
 import IdentificarPaciente from './pages/IdentificarPaciente'
 import Atendimento from './pages/Atendimento'
@@ -33,6 +34,8 @@ const App = () => (
           <Route element={<Layout />}>
             <Route path="/" element={<Index />} />
             <Route path="/forgot-password" element={<ForgotPassword />} />
+            {/* item 1 (29/10): tela que recebe o link de recuperação — antes o link caía em 404 */}
+            <Route path="/redefinir-senha" element={<RedefinirSenha />} />
             {/* /signup removida em P2-S01-T03: acesso somente por convite */}
             <Route path="/inicio" element={<Inicio />} />
             <Route path="/dashboard" element={<Navigate to="/inicio" replace />} />
