@@ -25,6 +25,7 @@ const ITENS: Item[] = [
   { rota: '/admin/filas', rotulo: 'Filas e prazos', papeis: ['owner', 'clinic_admin'] },
   { rota: '/admin/conhecimento', rotulo: 'Conhecimento', papeis: ['owner', 'clinic_admin'] },
   { rota: '/admin/agentes', rotulo: 'Agentes', papeis: ['owner', 'clinic_admin'] },
+  { rota: '/admin/funil', rotulo: 'Funil comercial', papeis: ['owner', 'clinic_admin'] },
   {
     rota: '/admin/dados-experts',
     rotulo: 'Dados do Clínica Experts',

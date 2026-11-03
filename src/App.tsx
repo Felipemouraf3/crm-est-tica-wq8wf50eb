@@ -16,6 +16,7 @@ import AdminConhecimento from './pages/AdminConhecimento'
 import AdminAgentes from './pages/AdminAgentes'
 import AdminDadosExperts from './pages/AdminDadosExperts'
 import RedefinirSenha from './pages/RedefinirSenha'
+import AdminFunil from './pages/AdminFunil'
 import Filas from './pages/Filas'
 import IdentificarPaciente from './pages/IdentificarPaciente'
 import Atendimento from './pages/Atendimento'
@@ -83,6 +84,15 @@ const App = () => (
               element={
                 <RequireRole papeis={['owner', 'clinic_admin']} exigeMfa>
                   <AdminAgentes />
+                </RequireRole>
+              }
+            />
+            {/* P3-S02-T01: console do funil (owner/clinic_admin + AAL2) */}
+            <Route
+              path="/admin/funil"
+              element={
+                <RequireRole papeis={['owner', 'clinic_admin']} exigeMfa>
+                  <AdminFunil />
                 </RequireRole>
               }
             />
