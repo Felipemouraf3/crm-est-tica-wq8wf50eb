@@ -312,17 +312,18 @@ function Conversa() {
               </div>
             </div>
           </div>
+          {/* P3-S02-T02: painel sempre visível — antes era `hidden lg:block` e sumia
+              em janelas estreitas (abaixo de 1024px), que é o caso de muitos notebooks
+              com zoom ou tela dividida. Em tela pequena ele empilha abaixo da conversa. */}
           <aside
-            className="hidden overflow-y-auto pr-1 lg:block"
+            className="mt-3 space-y-3 pr-1 lg:mt-0"
             style={{ maxHeight: '70vh', overflowY: 'auto' }}
           >
             <PainelOportunidade
               conversationId={conversationId ?? ''}
               clinicId={conversa.clinic_id ?? null}
             />
-            <div className="mt-3">
-              <PainelTicket conversationId={conversationId ?? ''} meuId={meuId} />
-            </div>
+            <PainelTicket conversationId={conversationId ?? ''} meuId={meuId} />
             <div className="mt-3">
               <PainelCopiloto conversationId={conversationId ?? ''} />
             </div>
