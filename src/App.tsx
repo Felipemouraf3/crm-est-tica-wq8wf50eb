@@ -15,6 +15,7 @@ import AdminFilas from './pages/AdminFilas'
 import AdminConhecimento from './pages/AdminConhecimento'
 import AdminAgentes from './pages/AdminAgentes'
 import AdminDadosExperts from './pages/AdminDadosExperts'
+import AdminCadencias from './pages/AdminCadencias'
 import RedefinirSenha from './pages/RedefinirSenha'
 import AdminFunil from './pages/AdminFunil'
 import Funil from './pages/Funil'
@@ -97,6 +98,15 @@ const App = () => (
               element={
                 <RequireRole papeis={['owner', 'clinic_admin']} exigeMfa>
                   <AdminFunil />
+                </RequireRole>
+              }
+            />
+            {/* P3-S05-T01: cadências de follow-up (owner/clinic_admin + AAL2) */}
+            <Route
+              path="/admin/cadencias"
+              element={
+                <RequireRole papeis={['owner', 'clinic_admin']} exigeMfa>
+                  <AdminCadencias />
                 </RequireRole>
               }
             />
