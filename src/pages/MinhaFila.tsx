@@ -6,8 +6,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '@/lib/supabase/client'
-import { clinicaSalva } from '@/components/clinic-selector'
-import { EmptyState } from '@/components/guards'
+import { AppShell } from '@/components/app-shell'
+import { useClinicaAtiva } from '@/components/clinic-selector'
+import { RequireAuth } from '@/components/guards'
+import type { Papel } from '@/lib/supabase/types'
 
 type Tarefa = {
   id: string
@@ -85,8 +87,9 @@ function distancia(iso: string): string {
   return diff < 0 ? `atrasada ${texto}` : `em ${texto}`
 }
 
-export default function MinhaFila() {
-  const [clinica, setClinica] = useState<string | null>(null)
+function MinhaFila() {
+  // A clínica ativa vem do contexto do AppShell (mesmo padrão do Atendimento).
+  const { clinicaAtiva: clinica } = useClinicaAtiva()
   const [tarefas, setTarefas] = useState<Tarefa[]>([])
   const [carregando, setCarregando] = useState(true)
   const [erro, setErro] = useState<string | null>(null)
@@ -236,7 +239,11 @@ export default function MinhaFila() {
   }
 
   if (!clinica) {
-    return <p className="text-sm text-[#6B6560]">Nenhuma clínica disponível para este usuário.</p>
+    return (
+      <p className="text-sm text-[#6B6560]">
+        Selecione a clínica no seletor acima para ver sua fila.
+      </p>
+    )
   }
 
   return (
@@ -480,6 +487,33 @@ export default function MinhaFila() {
         </div>
       )}
     </div>
+  )
+}
+
+/** Casca com papel + guarda de autenticação (padrão das telas do Atendimento). */
+export default function MinhaFilaComGuarda() {
+  const [papel, setPapel] = useState<Papel | null>(null)
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      const user = data.session?.user
+      if (!user) return
+      supabase
+        .from('memberships')
+        .select('role')
+        .eq('user_id', user.id)
+        .eq('active', true)
+        .limit(1)
+        .then(({ data: mem }) => setPapel((mem?.[0]?.role ?? null) as Papel | null))
+    })
+  }, [])
+
+  return (
+    <RequireAuth>
+      <AppShell papel={papel}>
+        <MinhaFila />
+      </AppShell>
+    </RequireAuth>
   )
 }
 

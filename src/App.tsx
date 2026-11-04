@@ -116,9 +116,9 @@ const App = () => (
             <Route path="/atendimento/:conversationId" element={<Conversa />} />
             {/* P2-S05-T03: visão do gestor da fila (todos os papéis; RPCs revalidam) */}
             <Route path="/filas" element={<Filas />} />
-            {/* P3-S03-T02: minha fila do dia — tarefas do usuário e linha do tempo */}
-            <Route path="/minha-fila" element={<MinhaFila />} />
           </Route>
+          {/* P3-S03-T02: minha fila do dia — tem AppShell próprio (fora do Layout) */}
+          <Route path="/minha-fila" element={<MinhaFila />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </TooltipProvider>
