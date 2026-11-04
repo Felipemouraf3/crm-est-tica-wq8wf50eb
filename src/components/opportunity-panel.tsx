@@ -24,26 +24,25 @@ export function PainelOportunidade({
   const [salvando, setSalvando] = useState(false)
 
   const carregar = useCallback(async () => {
-    if (!clinicId) return
+    if (!clinicId || !conversationId) return
     const { data } = await supabase.rpc('admin_get_funnel', { p_clinic: clinicId })
     const d = data as unknown as { sources?: (Origem & { active: boolean })[] } | null
     const ativas = (d?.sources ?? []).filter((s) => s.active)
     setOrigens(ativas)
     if (!origem && ativas.length === 1) setOrigem(ativas[0].key)
 
-    const { data: o } = await supabase.rpc('list_opportunities', {
-      p_clinic: clinicId,
-      p_pipeline: null,
+    // A oportunidade tem de ser a DESTE contato. Antes eu olhava a lista inteira da
+    // clínica e achava a primeira aberta — então toda conversa dizia "já existe".
+    const { data: o } = await supabase.rpc('opportunity_for_conversation', {
+      p_conversation: conversationId,
     })
-    const lista = (o ?? []) as unknown as (Opp & { status: string })[]
-    const aberta = lista.find((x) => x.status === 'open')
-    setExistente(aberta ?? null)
-  }, [clinicId, origem])
+    setExistente((o as unknown as Opp | null) ?? null)
+  }, [clinicId, conversationId, origem])
 
   useEffect(() => {
     void carregar()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clinicId])
+  }, [clinicId, conversationId])
 
   async function criar() {
     if (!conversationId || !origem) return
