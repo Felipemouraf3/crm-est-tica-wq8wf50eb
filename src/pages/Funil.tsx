@@ -3,7 +3,7 @@
 // A permissão é decidida no servidor: sales vê as suas, gestor vê as da clínica (RN-P3-S02-07).
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabase/client'
-import { useClinicaAtiva } from '@/components/clinic-selector'
+import { clinicaSalva } from '@/components/clinic-selector'
 
 type Opp = {
   id: string
@@ -34,13 +34,34 @@ const moeda = (cents: number) =>
   (cents / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 
 export default function Funil() {
-  const { clinicaAtiva: clinica } = useClinicaAtiva()
+  // A rota /funil vive fora do AppShell (Layout simples), então a clínica ativa
+  // vem do localStorage + tabela clinics, como fazem /filas e as telas de admin.
+  const [clinica, setClinica] = useState<string | null>(null)
   const [opps, setOpps] = useState<Opp[]>([])
   const [etapas, setEtapas] = useState<Etapa[]>([])
   const [hist, setHist] = useState<Hist[]>([])
   const [sel, setSel] = useState<Opp | null>(null)
   const [erro, setErro] = useState<string | null>(null)
   const [carregando, setCarregando] = useState(false)
+
+  useEffect(() => {
+    let vivo = true
+    ;(async () => {
+      const salva = clinicaSalva()
+      const { data } = await supabase
+        .from('clinics')
+        .select('id')
+        .eq('status', 'active')
+        .order('name')
+      if (!vivo) return
+      const lista = (data ?? []) as { id: string }[]
+      const escolhida = lista.find((c) => c.id === salva) ?? lista[0]
+      if (escolhida) setClinica(escolhida.id)
+    })()
+    return () => {
+      vivo = false
+    }
+  }, [])
 
   const carregar = useCallback(async () => {
     if (!clinica) return
@@ -101,7 +122,7 @@ export default function Funil() {
   if (!clinica) {
     return (
       <div className="rounded-xl border border-[#F1E5C8] bg-white p-6 text-sm text-[#6B6560]">
-        Escolha uma clínica no topo para ver o funil.
+        Nenhuma clínica disponível para este usuário.
       </div>
     )
   }
