@@ -10,6 +10,7 @@ import { AppShell } from '@/components/app-shell'
 import { RequireAuth, ErrorState } from '@/components/guards'
 import { PainelTicket } from '@/components/ticket-panel'
 import { PainelCopiloto } from '@/components/copilot-panel'
+import { PainelOportunidade } from '@/components/opportunity-panel'
 import type { Papel } from '@/lib/supabase/types'
 
 type Mensagem = {
@@ -39,6 +40,7 @@ type Conversa = {
   id: string
   status: string
   identification: string
+  clinic_id: string | null
   contacts: { name: string; primary_phone_e164: string | null } | null
 }
 
@@ -114,7 +116,7 @@ function Conversa() {
     ;(async () => {
       const { data: conv, error: errConv } = await supabase
         .from('conversations')
-        .select('id, status, identification, contacts(name, primary_phone_e164)')
+        .select('id, status, identification, clinic_id, contacts(name, primary_phone_e164)')
         .eq('id', conversationId)
         .maybeSingle()
       if (!vivo) return
@@ -314,7 +316,13 @@ function Conversa() {
             className="hidden overflow-y-auto pr-1 lg:block"
             style={{ maxHeight: '70vh', overflowY: 'auto' }}
           >
-            <PainelTicket conversationId={conversationId ?? ''} meuId={meuId} />
+            <PainelOportunidade
+              conversationId={conversationId ?? ''}
+              clinicId={conversa.clinic_id ?? null}
+            />
+            <div className="mt-3">
+              <PainelTicket conversationId={conversationId ?? ''} meuId={meuId} />
+            </div>
             <div className="mt-3">
               <PainelCopiloto conversationId={conversationId ?? ''} />
             </div>

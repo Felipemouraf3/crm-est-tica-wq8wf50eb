@@ -17,6 +17,7 @@ import AdminAgentes from './pages/AdminAgentes'
 import AdminDadosExperts from './pages/AdminDadosExperts'
 import RedefinirSenha from './pages/RedefinirSenha'
 import AdminFunil from './pages/AdminFunil'
+import Funil from './pages/Funil'
 import Filas from './pages/Filas'
 import IdentificarPaciente from './pages/IdentificarPaciente'
 import Atendimento from './pages/Atendimento'
@@ -87,6 +88,8 @@ const App = () => (
                 </RequireRole>
               }
             />
+            {/* P3-S02-T02: quadro do funil (todos os papéis; RPCs filtram por dono) */}
+            <Route path="/funil" element={<Funil />} />
             {/* P3-S02-T01: console do funil (owner/clinic_admin + AAL2) */}
             <Route
               path="/admin/funil"
