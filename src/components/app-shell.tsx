@@ -112,6 +112,20 @@ export function AppShell({ papel, children }: { papel: Papel | null; children: R
           >
             Sair
           </button>
+          {/* marcador de versão: serve para saber qual build o navegador está usando.
+              Se aqui aparecer uma versão antiga, é cache — Ctrl+F5 resolve. */}
+          <div className="mt-4 border-t border-[#F1E5C8] pt-3 text-[10px] leading-tight text-[#B8B0A6]">
+            <div data-testid="build-version">versão 0.0.73</div>
+            <button
+              onClick={() => {
+                void caches?.keys?.().then((ks) => Promise.all(ks.map((k) => caches.delete(k))))
+                window.location.reload()
+              }}
+              className="mt-1 underline hover:text-[#B8960E]"
+            >
+              Recarregar limpando cache
+            </button>
+          </div>
         </nav>
         <main className="flex-1 p-4">
           <header className="mb-4 flex items-center justify-between">
