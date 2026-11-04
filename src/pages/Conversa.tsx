@@ -10,7 +10,7 @@ import { AppShell } from '@/components/app-shell'
 import { RequireAuth, ErrorState } from '@/components/guards'
 import { PainelTicket } from '@/components/ticket-panel'
 import { PainelCopiloto } from '@/components/copilot-panel'
-import { PainelOportunidade } from '@/components/opportunity-panel'
+import { BotaoOportunidade, PainelOportunidade } from '@/components/opportunity-panel'
 import type { Papel } from '@/lib/supabase/types'
 
 type Mensagem = {
@@ -218,9 +218,15 @@ function Conversa() {
                     {mascara(conversa.contacts?.primary_phone_e164 ?? null)}
                   </span>
                 </div>
-                <span className="rounded bg-[#F1E5C8] px-2 py-0.5 text-[10px] font-semibold text-[#2D2A26]">
-                  {conversa.identification} · {conversa.status}
-                </span>
+                <div className="flex items-center gap-2">
+                  <BotaoOportunidade
+                    conversationId={conversationId ?? ''}
+                    clinicId={conversa.clinic_id ?? null}
+                  />
+                  <span className="rounded bg-[#F1E5C8] px-2 py-0.5 text-[10px] font-semibold text-[#2D2A26]">
+                    {conversa.identification} · {conversa.status}
+                  </span>
+                </div>
               </div>
             </div>
             <div className="flex-1 space-y-2 overflow-y-auto p-4">
