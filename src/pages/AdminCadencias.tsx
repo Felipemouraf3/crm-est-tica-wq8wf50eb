@@ -69,15 +69,16 @@ function AdminCadenciasConteudo() {
   const [erro, setErro] = useState<string | null>(null)
   const [aviso, setAviso] = useState<string | null>(null)
 
-  // formulário (inicia com o padrão do manual comercial: 5/15/30/60)
+  // Padrão REAL do manual comercial da clínica (confirmado por Felipe em 04/11):
+  // retomadas em 1, 3, 5, 7, 30 e 60 dias, de segunda a sábado.
   const [nome, setNome] = useState('Cadência comercial padrão')
   const [gatilho, setGatilho] = useState('lead_sem_resposta')
   const [aposHoras, setAposHoras] = useState(24)
-  const [atrasos, setAtrasos] = useState('5,15,30,60')
+  const [atrasos, setAtrasos] = useState('1,3,5,7,30,60')
   const [das, setDas] = useState('09:00')
   const [ate, setAte] = useState('18:00')
-  const [dias, setDias] = useState<number[]>([1, 2, 3, 4, 5])
-  const [maxTentativas, setMaxTentativas] = useState(4)
+  const [dias, setDias] = useState<number[]>([1, 2, 3, 4, 5, 6])
+  const [maxTentativas, setMaxTentativas] = useState(6)
   const [modo, setModo] = useState('tarefa_com_rascunho')
 
   const carregar = useCallback(async () => {
@@ -245,7 +246,7 @@ function AdminCadenciasConteudo() {
             <input
               value={atrasos}
               onChange={(e) => setAtrasos(e.target.value)}
-              placeholder="5,15,30,60"
+              placeholder="1,3,5,7,30,60"
               className="mt-1 block w-full rounded-lg border border-[#F1E5C8] px-2 py-1 text-[#2D2A26]"
             />
           </label>
@@ -334,9 +335,11 @@ function AdminCadenciasConteudo() {
         </div>
 
         <p className="mt-2 text-[10px] text-[#6B6560]">
-          Enquanto estiver em rascunho, nada é enviado sozinho: a cadência gera tarefa com a
-          mensagem pronta. Mudar uma política já publicada cria uma versão nova e preserva a
-          anterior.
+          Uma retomada por atraso: {atrasos.split(',').filter((x) => x.trim()).length} tentativas em{' '}
+          {atrasos.split(',').filter((x) => x.trim()).length} datas diferentes (o máximo acima
+          limita quantas acontecem). Enquanto estiver em rascunho, nada é enviado sozinho: a
+          cadência gera tarefa com a mensagem pronta. Mudar uma política já publicada cria uma
+          versão nova e preserva a anterior.
         </p>
       </section>
 
