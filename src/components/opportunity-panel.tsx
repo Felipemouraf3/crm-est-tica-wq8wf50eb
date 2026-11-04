@@ -9,7 +9,7 @@ import { supabase } from '@/lib/supabase/client'
 type Origem = { key: string; label: string }
 type Opp = { id: string; stage_label: string; amount_cents: number; status: string }
 
-function usarOportunidade(conversationId: string, clinicId: string | null) {
+function useOportunidade(conversationId: string, clinicId: string | null) {
   const [origens, setOrigens] = useState<Origem[]>([])
   const [existente, setExistente] = useState<Opp | null>(null)
   const [erro, setErro] = useState<string | null>(null)
@@ -73,7 +73,7 @@ export function BotaoOportunidade({
   const [aberto, setAberto] = useState(false)
   const [origem, setOrigem] = useState('')
   const [valor, setValor] = useState('')
-  const { origens, existente, erro, aviso, salvando, criar } = usarOportunidade(
+  const { origens, existente, erro, aviso, salvando, criar } = useOportunidade(
     conversationId,
     clinicId,
   )
@@ -193,7 +193,7 @@ export function PainelOportunidade({
 }) {
   const [origem, setOrigem] = useState('')
   const [valor, setValor] = useState('')
-  const { origens, existente, erro, aviso, salvando, criar } = usarOportunidade(
+  const { origens, existente, erro, aviso, salvando, criar } = useOportunidade(
     conversationId,
     clinicId,
   )
