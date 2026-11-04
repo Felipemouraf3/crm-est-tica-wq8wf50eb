@@ -11,6 +11,7 @@ import { RequireAuth, ErrorState } from '@/components/guards'
 import { PainelTicket } from '@/components/ticket-panel'
 import { PainelCopiloto } from '@/components/copilot-panel'
 import { BotaoOportunidade, PainelOportunidade } from '@/components/opportunity-panel'
+import { PainelAgenda } from '@/components/scheduling-panel'
 import type { Papel } from '@/lib/supabase/types'
 
 type Mensagem = {
@@ -330,6 +331,12 @@ function Conversa() {
               clinicId={conversa.clinic_id ?? null}
             />
             <PainelTicket conversationId={conversationId ?? ''} meuId={meuId} />
+            {/* P3-S04-T02: agenda assistida — horários livres + agendamentos do paciente.
+                Ao clicar num horário, o texto pronto vai para a caixa de resposta. */}
+            <PainelAgenda
+              conversationId={conversationId ?? ''}
+              aoCopiar={(texto) => setResposta((atual) => (atual ? `${atual} ${texto}` : texto))}
+            />
             <div className="mt-3">
               <PainelCopiloto conversationId={conversationId ?? ''} />
             </div>
