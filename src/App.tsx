@@ -101,11 +101,15 @@ const App = () => (
                 </RequireRole>
               }
             />
-            {/* P3-S05-T01: cadências de follow-up (owner/clinic_admin + AAL2) */}
+            {/* P3-S05-T01: cadências de follow-up.
+                `manager` entra: é quem opera a cadência comercial e a RPC
+                admin_save_followup_policy já o autoriza no servidor. Rota mais
+                restrita que o servidor bloqueava justamente o dono da rotina
+                (achado ao provar a tela em 04/11). */}
             <Route
               path="/admin/cadencias"
               element={
-                <RequireRole papeis={['owner', 'clinic_admin']} exigeMfa>
+                <RequireRole papeis={['owner', 'clinic_admin', 'manager']} exigeMfa>
                   <AdminCadencias />
                 </RequireRole>
               }

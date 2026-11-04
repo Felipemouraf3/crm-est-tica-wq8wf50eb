@@ -28,7 +28,11 @@ const ITENS: Item[] = [
   { rota: '/admin/conhecimento', rotulo: 'Conhecimento', papeis: ['owner', 'clinic_admin'] },
   { rota: '/admin/agentes', rotulo: 'Agentes', papeis: ['owner', 'clinic_admin'] },
   { rota: '/admin/funil', rotulo: 'Funil comercial', papeis: ['owner', 'clinic_admin'] },
-  { rota: '/admin/cadencias', rotulo: 'Cadências de follow-up', papeis: ['owner', 'clinic_admin'] },
+  {
+    rota: '/admin/cadencias',
+    rotulo: 'Cadências de follow-up',
+    papeis: ['owner', 'clinic_admin', 'manager'],
+  },
   {
     rota: '/admin/dados-experts',
     rotulo: 'Dados do Clínica Experts',
