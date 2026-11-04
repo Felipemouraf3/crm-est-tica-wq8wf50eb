@@ -20,7 +20,28 @@ type Opp = {
   dias_na_etapa: number
 }
 
-type Etapa = { id: string; key: string; label: string; position: number; active: boolean }
+type Etapa = {
+  id: string
+  key: string
+  label: string
+  position: number
+  active: boolean
+  is_final_won?: boolean
+  is_final_lost?: boolean
+}
+type Motivo = { key: string; label: string }
+type Sugestao = {
+  id: string
+  opportunity_id: string
+  contact_name: string | null
+  stage_label: string
+  amount_cents: number
+  sale_expert_uuid: string
+  sale_amount_cents: number
+  sale_date: string | null
+  status: string
+  created_at: string
+}
 type Hist = {
   id: string
   de: string
@@ -43,6 +64,14 @@ export default function Funil() {
   const [sel, setSel] = useState<Opp | null>(null)
   const [erro, setErro] = useState<string | null>(null)
   const [carregando, setCarregando] = useState(false)
+  const [motivos, setMotivos] = useState<Motivo[]>([])
+  const [sugestoes, setSugestoes] = useState<Sugestao[]>([])
+  // diálogo de fechamento: 'perdido' pede motivo; 'ganho' pede venda ou aprovação
+  const [fecho, setFecho] = useState<{ tipo: 'ganho' | 'perdido'; stageId: string } | null>(null)
+  const [motivoSel, setMotivoSel] = useState('')
+  const [vendaSel, setVendaSel] = useState('')
+  const [justificativa, setJustificativa] = useState('')
+  const [fechando, setFechando] = useState(false)
 
   useEffect(() => {
     let vivo = true
@@ -74,9 +103,16 @@ export default function Funil() {
     if (o.error) setErro(o.error.message)
     else setOpps((o.data ?? []) as Opp[])
     if (!f.error) {
-      const d = f.data as unknown as { stages?: Etapa[] } | null
+      const d = f.data as unknown as {
+        stages?: Etapa[]
+        loss_reasons?: Motivo[]
+      } | null
       setEtapas((d?.stages ?? []).filter((s) => s.active))
+      setMotivos(d?.loss_reasons ?? [])
     }
+    // sugestões de ganho pela venda espelhada (P3-S02-T03)
+    const { data: sg } = await supabase.rpc('list_gain_suggestions', { p_clinic: clinica })
+    setSugestoes(((sg ?? []) as Sugestao[]).filter((s) => s.status === 'pending'))
     setCarregando(false)
   }, [clinica])
 
@@ -91,8 +127,21 @@ export default function Funil() {
     if (!error) setHist((data ?? []) as Hist[])
   }
 
+  /** Move para etapas intermediárias direto; finais abrem o diálogo de regra. */
   async function mover(stageId: string) {
     if (!sel) return
+    const destino = etapas.find((e) => e.id === stageId)
+    if (destino?.is_final_lost) {
+      setMotivoSel('')
+      setFecho({ tipo: 'perdido', stageId })
+      return
+    }
+    if (destino?.is_final_won) {
+      setVendaSel('')
+      setJustificativa('')
+      setFecho({ tipo: 'ganho', stageId })
+      return
+    }
     setErro(null)
     const { error } = await supabase.rpc('move_opportunity', {
       p_opportunity: sel.id,
@@ -104,6 +153,83 @@ export default function Funil() {
       return
     }
     setSel(null)
+    await carregar()
+  }
+
+  /** Confirma o fechamento respeitando as regras do servidor. */
+  async function confirmarFecho() {
+    if (!sel || !fecho) return
+    setErro(null)
+    setFechando(true)
+    if (fecho.tipo === 'perdido') {
+      if (!motivoSel) {
+        setErro('Escolha o motivo da perda.')
+        setFechando(false)
+        return
+      }
+      const { error } = await supabase.rpc('move_opportunity', {
+        p_opportunity: sel.id,
+        p_stage: fecho.stageId,
+        p_reason: motivoSel,
+      })
+      if (error) {
+        setErro(error.message)
+        setFechando(false)
+        return
+      }
+    } else {
+      // ganho: com venda vinculada, ou aprovação do gestor com justificativa
+      if (vendaSel) {
+        const { error } = await supabase.rpc('move_opportunity', {
+          p_opportunity: sel.id,
+          p_stage: fecho.stageId,
+          p_reason: null,
+          p_sale_uuid: vendaSel,
+        })
+        if (error) {
+          setErro(error.message)
+          setFechando(false)
+          return
+        }
+      } else {
+        const { error } = await supabase.rpc('approve_gain_without_sale', {
+          p_opportunity: sel.id,
+          p_reason: justificativa,
+        })
+        if (error) {
+          setErro(
+            error.message.includes('aprovacao_apenas_gestor')
+              ? 'Só o gestor pode fechar sem venda vinculada.'
+              : error.message,
+          )
+          setFechando(false)
+          return
+        }
+      }
+    }
+    setFechando(false)
+    setFecho(null)
+    setSel(null)
+    await carregar()
+  }
+
+  async function confirmarSugestao(id: string) {
+    setErro(null)
+    const { error } = await supabase.rpc('confirm_gain_suggestion', { p_suggestion: id })
+    if (error) {
+      setErro(error.message)
+      return
+    }
+    await carregar()
+  }
+
+  async function dispensarSugestao(id: string) {
+    setErro(null)
+    const { error } = await supabase.rpc('dismiss_gain_suggestion', { p_suggestion: id })
+    if (error) {
+      setErro(error.message)
+      return
+    }
     await carregar()
   }
 
@@ -152,6 +278,50 @@ export default function Funil() {
         >
           {erro}
         </div>
+      )}
+
+      {sugestoes.length > 0 && (
+        <section
+          aria-label="Sugestões de ganho pela venda"
+          className="rounded-xl border border-[#D4AF37] bg-[#FFF8ED] p-3"
+        >
+          <h2 className="mb-2 text-xs font-bold uppercase tracking-wide text-[#B8960E]">
+            Venda identificada · confirme o ganho
+          </h2>
+          <ul className="space-y-2">
+            {sugestoes.map((s) => (
+              <li
+                key={s.id}
+                className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[#F1E5C8] bg-white p-2"
+              >
+                <div className="min-w-0">
+                  <p className="truncate text-xs font-semibold text-[#2D2A26]">
+                    {s.contact_name ?? 'Contato'}
+                  </p>
+                  <p className="text-[10px] text-[#6B6560]">
+                    Venda de {moeda(s.sale_amount_cents)} em{' '}
+                    {s.sale_date ? new Date(s.sale_date).toLocaleDateString('pt-BR') : '—'} · hoje
+                    em {s.stage_label}
+                  </p>
+                </div>
+                <div className="flex gap-1">
+                  <button
+                    onClick={() => void confirmarSugestao(s.id)}
+                    className="rounded-lg bg-[#B8960E] px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-[#8f7409]"
+                  >
+                    Confirmar ganho
+                  </button>
+                  <button
+                    onClick={() => void dispensarSugestao(s.id)}
+                    className="rounded-lg border border-[#F1E5C8] px-2 py-1 text-[11px] text-[#6B6560]"
+                  >
+                    Ignorar
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
 
       {opps.length === 0 && (
@@ -274,6 +444,78 @@ export default function Funil() {
                   </button>
                 ))}
             </div>
+
+            {fecho && (
+              <div
+                role="dialog"
+                aria-label={fecho.tipo === 'perdido' ? 'Motivo da perda' : 'Evidência do ganho'}
+                className="mb-4 rounded-lg border border-[#D4AF37] bg-[#FFF8ED] p-3"
+              >
+                <h3 className="mb-2 text-xs font-bold text-[#2D2A26]">
+                  {fecho.tipo === 'perdido' ? 'Por que foi perdido?' : 'Evidência do ganho'}
+                </h3>
+
+                {fecho.tipo === 'perdido' ? (
+                  <label className="block text-[11px] text-[#6B6560]">
+                    Motivo (obrigatório)
+                    <select
+                      value={motivoSel}
+                      onChange={(ev) => setMotivoSel(ev.target.value)}
+                      className="mt-1 block w-full rounded-lg border border-[#F1E5C8] px-2 py-1 text-xs text-[#2D2A26]"
+                    >
+                      <option value="">Selecione…</option>
+                      {motivos.map((m) => (
+                        <option key={m.key} value={m.key}>
+                          {m.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ) : (
+                  <div className="space-y-2">
+                    <label className="block text-[11px] text-[#6B6560]">
+                      Nº da venda no Clínica Experts (opcional)
+                      <input
+                        value={vendaSel}
+                        onChange={(ev) => setVendaSel(ev.target.value)}
+                        placeholder="ex.: 183142c8-…"
+                        className="mt-1 block w-full rounded-lg border border-[#F1E5C8] px-2 py-1 text-xs text-[#2D2A26]"
+                      />
+                    </label>
+                    <p className="text-[10px] text-[#6B6560]">
+                      Sem venda vinculada, só o gestor fecha — e fica marcado “a conferir”.
+                    </p>
+                    {!vendaSel && (
+                      <label className="block text-[11px] text-[#6B6560]">
+                        Justificativa do gestor
+                        <input
+                          value={justificativa}
+                          onChange={(ev) => setJustificativa(ev.target.value)}
+                          placeholder="ex.: cliente fechou no balcão"
+                          className="mt-1 block w-full rounded-lg border border-[#F1E5C8] px-2 py-1 text-xs text-[#2D2A26]"
+                        />
+                      </label>
+                    )}
+                  </div>
+                )}
+
+                <div className="mt-2 flex gap-1">
+                  <button
+                    onClick={() => void confirmarFecho()}
+                    disabled={fechando}
+                    className="rounded-lg bg-[#B8960E] px-2.5 py-1 text-[11px] font-semibold text-white disabled:opacity-50"
+                  >
+                    {fechando ? 'Salvando…' : 'Confirmar'}
+                  </button>
+                  <button
+                    onClick={() => setFecho(null)}
+                    className="rounded-lg border border-[#F1E5C8] px-2 py-1 text-[11px] text-[#6B6560]"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            )}
 
             <h3 className="mb-2 text-sm font-semibold text-[#2D2A26]">Histórico</h3>
             <ol className="space-y-2">
