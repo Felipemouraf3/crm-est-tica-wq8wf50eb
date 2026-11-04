@@ -5,7 +5,9 @@
 // CA-P3-S01-07: os valores de venda só chegam a gestor/proprietário (a RPC devolve null).
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabase/client'
+import { AppShell } from '@/components/app-shell'
 import { useClinicaAtiva } from '@/components/clinic-selector'
+import type { Papel } from '@/lib/supabase/types'
 
 type StatusLinha = {
   resource: string
@@ -52,7 +54,7 @@ function quando(iso: string | null): string {
   return d.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })
 }
 
-export default function AdminDadosExperts() {
+function AdminDadosExpertsConteudo() {
   const { clinicaAtiva: clinica } = useClinicaAtiva()
   const [status, setStatus] = useState<StatusLinha[]>([])
   const [mapeamentos, setMapeamentos] = useState<Mapeamento[]>([])
@@ -338,5 +340,33 @@ export default function AdminDadosExperts() {
         </div>
       </section>
     </div>
+  )
+}
+
+/** Casca da tela. O AppShell é quem fornece a clínica ativa por contexto —
+ *  `useClinicaAtiva()` fora dele devolve null e a tela fica eternamente em
+ *  "Escolha uma clínica no topo", mesmo com clínica escolhida. (04/11)
+ *  A guarda de papel e o segundo fator continuam na rota (App.tsx). */
+export default function AdminDadosExperts() {
+  const [papel, setPapel] = useState<Papel | null>(null)
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      const user = data.session?.user
+      if (!user) return
+      supabase
+        .from('memberships')
+        .select('role')
+        .eq('user_id', user.id)
+        .eq('active', true)
+        .limit(1)
+        .then(({ data: mem }) => setPapel((mem?.[0]?.role ?? null) as Papel | null))
+    })
+  }, [])
+
+  return (
+    <AppShell papel={papel}>
+      <AdminDadosExpertsConteudo />
+    </AppShell>
   )
 }

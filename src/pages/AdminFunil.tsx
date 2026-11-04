@@ -4,7 +4,9 @@
 // CA-P3-S02-07: só owner/clinic_admin escrevem; a RPC revalida no servidor.
 import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase/client'
+import { AppShell } from '@/components/app-shell'
 import { useClinicaAtiva } from '@/components/clinic-selector'
+import type { Papel } from '@/lib/supabase/types'
 
 type Etapa = {
   id: string
@@ -26,7 +28,7 @@ type Funil = {
 
 const VAZIO: Funil = { pipeline: null, stages: [], sources: [], reasons: [] }
 
-export default function AdminFunil() {
+function AdminFunilConteudo() {
   const { clinicaAtiva: clinica } = useClinicaAtiva()
   const [funil, setFunil] = useState<Funil>(VAZIO)
   const [aba, setAba] = useState<'etapas' | 'origens' | 'motivos'>('etapas')
@@ -364,5 +366,33 @@ export default function AdminFunil() {
         </section>
       )}
     </div>
+  )
+}
+
+/** Casca da tela. O AppShell é quem fornece a clínica ativa por contexto —
+ *  `useClinicaAtiva()` fora dele devolve null e a tela fica eternamente em
+ *  "Escolha uma clínica no topo", mesmo com clínica escolhida. (04/11)
+ *  A guarda de papel e o segundo fator continuam na rota (App.tsx). */
+export default function AdminFunil() {
+  const [papel, setPapel] = useState<Papel | null>(null)
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      const user = data.session?.user
+      if (!user) return
+      supabase
+        .from('memberships')
+        .select('role')
+        .eq('user_id', user.id)
+        .eq('active', true)
+        .limit(1)
+        .then(({ data: mem }) => setPapel((mem?.[0]?.role ?? null) as Papel | null))
+    })
+  }, [])
+
+  return (
+    <AppShell papel={papel}>
+      <AdminFunilConteudo />
+    </AppShell>
   )
 }
