@@ -19,6 +19,7 @@ import RedefinirSenha from './pages/RedefinirSenha'
 import AdminFunil from './pages/AdminFunil'
 import Funil from './pages/Funil'
 import Filas from './pages/Filas'
+import MinhaFila from './pages/MinhaFila'
 import IdentificarPaciente from './pages/IdentificarPaciente'
 import Atendimento from './pages/Atendimento'
 import Conversa from './pages/Conversa'
@@ -115,6 +116,8 @@ const App = () => (
             <Route path="/atendimento/:conversationId" element={<Conversa />} />
             {/* P2-S05-T03: visão do gestor da fila (todos os papéis; RPCs revalidam) */}
             <Route path="/filas" element={<Filas />} />
+            {/* P3-S03-T02: minha fila do dia — tarefas do usuário e linha do tempo */}
+            <Route path="/minha-fila" element={<MinhaFila />} />
           </Route>
           <Route path="*" element={<NotFound />} />
         </Routes>
