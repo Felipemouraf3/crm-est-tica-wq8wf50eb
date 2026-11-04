@@ -105,10 +105,13 @@ export default function Funil() {
     if (!f.error) {
       const d = f.data as unknown as {
         stages?: Etapa[]
-        loss_reasons?: Motivo[]
+        reasons?: Motivo[]
       } | null
       setEtapas((d?.stages ?? []).filter((s) => s.active))
-      setMotivos(d?.loss_reasons ?? [])
+      // admin_get_funnel devolve a chave 'reasons' (não 'loss_reasons')
+      setMotivos(
+        (d?.reasons ?? []).filter((r) => (r as Motivo & { active?: boolean }).active !== false),
+      )
     }
     // sugestões de ganho pela venda espelhada (P3-S02-T03)
     const { data: sg } = await supabase.rpc('list_gain_suggestions', { p_clinic: clinica })
