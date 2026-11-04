@@ -27,7 +27,7 @@ type Funil = {
 const VAZIO: Funil = { pipeline: null, stages: [], sources: [], reasons: [] }
 
 export default function AdminFunil() {
-  const clinica = useClinicaAtiva()
+  const { clinicaAtiva: clinica } = useClinicaAtiva()
   const [funil, setFunil] = useState<Funil>(VAZIO)
   const [aba, setAba] = useState<'etapas' | 'origens' | 'motivos'>('etapas')
   const [erro, setErro] = useState<string | null>(null)

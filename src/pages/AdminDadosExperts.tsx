@@ -53,7 +53,7 @@ function quando(iso: string | null): string {
 }
 
 export default function AdminDadosExperts() {
-  const clinica = useClinicaAtiva()
+  const { clinicaAtiva: clinica } = useClinicaAtiva()
   const [status, setStatus] = useState<StatusLinha[]>([])
   const [mapeamentos, setMapeamentos] = useState<Mapeamento[]>([])
   const [org, setOrg] = useState<string | null>(null)

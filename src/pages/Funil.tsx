@@ -34,7 +34,7 @@ const moeda = (cents: number) =>
   (cents / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 
 export default function Funil() {
-  const clinica = useClinicaAtiva()
+  const { clinicaAtiva: clinica } = useClinicaAtiva()
   const [opps, setOpps] = useState<Opp[]>([])
   const [etapas, setEtapas] = useState<Etapa[]>([])
   const [hist, setHist] = useState<Hist[]>([])
