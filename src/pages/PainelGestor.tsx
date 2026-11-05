@@ -153,11 +153,21 @@ function PainelGestorConteudo() {
     return m
   }, [painel])
 
+  // A lista abre INLINE, logo abaixo dos cartões — não em modal.
+  // Motivo: em 05/11 o modal não abria na máquina do Felipe e não consegui reproduzir.
+  // `position: fixed` depende da viewport: se qualquer ancestral tiver transform/filter,
+  // o modal é renderizado fora do lugar e o clique "não faz nada". A lista inline
+  // não tem esse risco e ainda rola até ela, que é o comportamento esperado.
   async function abrirDetalhe(key: string, label: string) {
     if (!clinica) return
     setAberto({ key, label })
     setCarregandoDetalhe(true)
     setDetalhe([])
+    setTimeout(() => {
+      document
+        .getElementById('lista-detalhe')
+        ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }, 120)
 
     const de = primeiroDia(periodo)
     const ate = ultimoDia(periodo)
@@ -415,45 +425,43 @@ function PainelGestorConteudo() {
       )}
 
       {aberto && (
-        <div
-          role="dialog"
+        <section
+          id="lista-detalhe"
           aria-label={`Casos de ${aberto.label}`}
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          className="scroll-mt-4 rounded-xl border-2 border-[#B8960E] bg-white p-4"
         >
-          <div className="w-full max-w-lg rounded-xl bg-white p-4">
-            <div className="flex items-start justify-between">
-              <div>
-                <h2 className="font-serif text-lg font-bold text-[#2D2A26]">{aberto.label}</h2>
-                <p className="text-xs text-[#6B6560]">
-                  {detailTotal(aberto.key, ind)} casos em {periodo}
-                </p>
-              </div>
-              <button
-                onClick={() => setAberto(null)}
-                className="rounded-lg border border-[#F1E5C8] px-2 py-1 text-[11px] text-[#6B6560]"
-              >
-                Fechar
-              </button>
-            </div>
-            {carregandoDetalhe ? (
-              <p className="mt-3 text-xs text-[#6B6560]">Carregando…</p>
-            ) : detalhe.length === 0 ? (
-              <p className="mt-3 text-xs text-[#6B6560]">
-                Lista detalhada disponível para agendamentos e vendas. Para este indicador o total
-                está no cartão.
+          <div className="flex items-start justify-between">
+            <div>
+              <h2 className="font-serif text-lg font-bold text-[#2D2A26]">{aberto.label}</h2>
+              <p className="text-xs text-[#6B6560]">
+                {detailTotal(aberto.key, ind)} casos em {periodo}
               </p>
-            ) : (
-              <ul className="mt-3 max-h-80 divide-y divide-[#F7F0E1] overflow-y-auto text-xs">
-                {detalhe.map((d, i) => (
-                  <li key={`${d.nome}-${i}`} className="flex justify-between py-1">
-                    <span className="text-[#2D2A26]">{d.nome}</span>
-                    <span className="text-[#6B6560]">{d.quando}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
+            </div>
+            <button
+              onClick={() => setAberto(null)}
+              className="rounded-lg border border-[#F1E5C8] px-3 py-1.5 text-xs font-semibold text-[#6B6560]"
+            >
+              Fechar lista
+            </button>
           </div>
-        </div>
+          {carregandoDetalhe ? (
+            <p className="mt-3 text-xs text-[#6B6560]">Carregando…</p>
+          ) : detalhe.length === 0 ? (
+            <p className="mt-3 text-xs text-[#6B6560]">
+              Lista detalhada disponível para agendamentos e vendas. Para este indicador o total
+              está no cartão.
+            </p>
+          ) : (
+            <ul className="mt-3 max-h-80 divide-y divide-[#F7F0E1] overflow-y-auto text-xs">
+              {detalhe.map((d, i) => (
+                <li key={`${d.nome}-${i}`} className="flex justify-between py-1.5">
+                  <span className="text-[#2D2A26]">{d.nome}</span>
+                  <span className="text-[#6B6560]">{d.quando}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
       )}
     </div>
   )
