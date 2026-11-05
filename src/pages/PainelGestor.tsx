@@ -1,12 +1,20 @@
 // src/pages/PainelGestor.tsx — P3-S07-T02
 // Painel do gestor: um número por indicador, com o dicionário ao lado para explicar
-// de onde ele vem. Clicar num cartão abre a lista dos casos que o compõem.
+// de onde ele vem. Cada cartão é um LINK para a lista dos casos que o compõem.
+//
+// POR QUE LINK E NÃO onClick (05/11/2026):
+// o Felipe reportou duas vezes que clicar em "Agendamentos" e "Vendas" não abria nada.
+// Testei com owner em Chrome real e funcionava — não reproduzi. Em vez de insistir na
+// causa, troquei o mecanismo: um <Link to="/painel?m=agendamentos"> é navegação nativa
+// do navegador. Não depende de handler de React, de modal nem de position:fixed.
+// Bônus: dá para compartilhar o endereço e o botão "voltar" funciona.
 //
 // Regras que a TELA respeita (o servidor revalida sempre):
-//  - valor financeiro só para owner/clinic_admin/manager (RN-03) — chega nulo para os outros
+//  - valor financeiro só para owner/clinic_admin/manager (RN-03)
 //  - "dados até" é mostrado, para não confundir mês fechado com parcial
 //  - o dicionário vem do banco, com definição, origem, versão e responsável (RN-01)
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import { supabase } from '@/lib/supabase/client'
 import { AppShell } from '@/components/app-shell'
 import { useClinicaAtiva } from '@/components/clinic-selector'
@@ -33,8 +41,6 @@ type Painel = {
   dicionario: Def[]
 }
 
-const FINANCEIROS = new Set(['vendas_valor_centavos', 'ticket_medio_centavos'])
-
 type BaseLine = {
   existe: boolean
   baseline_start?: string
@@ -50,11 +56,13 @@ type BaseLine = {
   validated_at?: string | null
 }
 
+const FINANCEIROS = new Set(['vendas_valor_centavos', 'ticket_medio_centavos'])
+
 function mesISO(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
 }
 
-/** Último mês FECHADO: o painel abre nele, não no mês corrente (que tem 2 dias). */
+/** Último mês FECHADO: o painel abre nele, não no mês corrente. */
 function mesFechado(): string {
   const agora = new Date()
   const anterior = new Date(agora.getFullYear(), agora.getMonth() - 1, 1)
@@ -90,19 +98,16 @@ function pct(parte: number | undefined, todo: number | undefined): string {
   return `${Math.round((parte / todo) * 100)}%`
 }
 
-function detailTotal(key: string, ind: Record<string, number>): number {
-  return ind[key] ?? 0
-}
-
 function PainelGestorConteudo() {
   const { clinicaAtiva: clinica } = useClinicaAtiva()
+  const [params] = useSearchParams()
+  const metricaAberta = params.get('m')
   const [periodo, setPeriodo] = useState(mesFechado())
   const [painel, setPainel] = useState<Painel | null>(null)
   const [carregando, setCarregando] = useState(true)
   const [erro, setErro] = useState<string | null>(null)
   const [baseline, setBaseline] = useState<BaseLine | null>(null)
   const [validando, setValidando] = useState(false)
-  const [aberto, setAberto] = useState<{ key: string; label: string } | null>(null)
   const [detalhe, setDetalhe] = useState<{ nome: string; quando: string }[]>([])
   const [carregandoDetalhe, setCarregandoDetalhe] = useState(false)
 
@@ -134,6 +139,86 @@ function PainelGestorConteudo() {
     void carregarBaseline()
   }, [carregarBaseline])
 
+  // carrega a lista do indicador que está na URL
+  useEffect(() => {
+    if (!clinica || !metricaAberta) {
+      setDetalhe([])
+      return
+    }
+    let vivo = true
+    ;(async () => {
+      setCarregandoDetalhe(true)
+      setDetalhe([])
+      const de = primeiroDia(periodo)
+      const ate = ultimoDia(periodo)
+      try {
+        if (metricaAberta === 'agendamentos' || metricaAberta === 'agendamentos_realizados') {
+          let q = supabase
+            .from('appointments_mirror')
+            .select('patient_name, starts_at, status')
+            .eq('clinic_id', clinica)
+            .gte('starts_at', de)
+            .lte('starts_at', `${ate}T23:59:59`)
+            .order('starts_at', { ascending: false })
+            .limit(80)
+          if (metricaAberta === 'agendamentos_realizados') q = q.eq('status', 'done')
+          const { data, error } = await q
+          if (!vivo) return
+          if (error) setErro(error.message)
+          setDetalhe(
+            (data ?? []).map((r: { patient_name: string | null; starts_at: string }) => ({
+              nome: r.patient_name ?? 'sem nome',
+              quando: new Date(r.starts_at).toLocaleString('pt-BR', {
+                dateStyle: 'short',
+                timeStyle: 'short',
+              }),
+            })),
+          )
+        } else if (metricaAberta === 'vendas') {
+          const { data, error } = await supabase
+            .from('sales_mirror')
+            .select('buyer_name, sale_date, final_amount_cents')
+            .eq('clinic_id', clinica)
+            .gte('sale_date', de)
+            .lte('sale_date', `${ate}T23:59:59`)
+            .order('sale_date', { ascending: false })
+            .limit(80)
+          if (!vivo) return
+          if (error) setErro(error.message)
+          setDetalhe(
+            (data ?? []).map(
+              (r: {
+                buyer_name: string | null
+                sale_date: string
+                final_amount_cents: number
+              }) => ({
+                nome: `${r.buyer_name ?? 'sem nome'} · ${brl(r.final_amount_cents)}`,
+                quando: new Date(r.sale_date).toLocaleDateString('pt-BR'),
+              }),
+            ),
+          )
+        } else {
+          setDetalhe([])
+        }
+      } finally {
+        if (vivo) setCarregandoDetalhe(false)
+      }
+    })()
+    return () => {
+      vivo = false
+    }
+  }, [clinica, metricaAberta, periodo])
+
+  useEffect(() => {
+    if (metricaAberta) {
+      setTimeout(() => {
+        document
+          .getElementById('lista-detalhe')
+          ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }, 150)
+    }
+  }, [metricaAberta])
+
   async function validarBaseline() {
     if (!clinica) return
     setValidando(true)
@@ -153,71 +238,6 @@ function PainelGestorConteudo() {
     return m
   }, [painel])
 
-  // A lista abre INLINE, logo abaixo dos cartões — não em modal.
-  // Motivo: em 05/11 o modal não abria na máquina do Felipe e não consegui reproduzir.
-  // `position: fixed` depende da viewport: se qualquer ancestral tiver transform/filter,
-  // o modal é renderizado fora do lugar e o clique "não faz nada". A lista inline
-  // não tem esse risco e ainda rola até ela, que é o comportamento esperado.
-  async function abrirDetalhe(key: string, label: string) {
-    if (!clinica) return
-    setAberto({ key, label })
-    setCarregandoDetalhe(true)
-    setDetalhe([])
-    setTimeout(() => {
-      document
-        .getElementById('lista-detalhe')
-        ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    }, 120)
-
-    const de = primeiroDia(periodo)
-    const ate = ultimoDia(periodo)
-
-    try {
-      if (key === 'agendamentos' || key === 'agendamentos_realizados') {
-        let q = supabase
-          .from('appointments_mirror')
-          .select('patient_name, starts_at, status')
-          .eq('clinic_id', clinica)
-          .gte('starts_at', de)
-          .lte('starts_at', `${ate}T23:59:59`)
-          .order('starts_at', { ascending: false })
-          .limit(50)
-        if (key === 'agendamentos_realizados') q = q.eq('status', 'done')
-        const { data } = await q
-        setDetalhe(
-          (data ?? []).map((r: { patient_name: string | null; starts_at: string }) => ({
-            nome: r.patient_name ?? 'sem nome',
-            quando: new Date(r.starts_at).toLocaleString('pt-BR', {
-              dateStyle: 'short',
-              timeStyle: 'short',
-            }),
-          })),
-        )
-      } else if (key === 'vendas') {
-        const { data } = await supabase
-          .from('sales_mirror')
-          .select('buyer_name, sale_date, final_amount_cents')
-          .eq('clinic_id', clinica)
-          .gte('sale_date', de)
-          .lte('sale_date', `${ate}T23:59:59`)
-          .order('sale_date', { ascending: false })
-          .limit(50)
-        setDetalhe(
-          (data ?? []).map(
-            (r: { buyer_name: string | null; sale_date: string; final_amount_cents: number }) => ({
-              nome: `${r.buyer_name ?? 'sem nome'} · ${brl(r.final_amount_cents)}`,
-              quando: new Date(r.sale_date).toLocaleDateString('pt-BR'),
-            }),
-          ),
-        )
-      } else {
-        setDetalhe([])
-      }
-    } finally {
-      setCarregandoDetalhe(false)
-    }
-  }
-
   if (!clinica) {
     return (
       <div className="rounded-xl border border-[#F1E5C8] bg-white p-6 text-sm text-[#6B6560]">
@@ -227,8 +247,6 @@ function PainelGestorConteudo() {
   }
 
   // Cada número que o gestor usa para decidir tem o SEU cartão, com o valor grande.
-  // Antes, realizados/cancelados/valor vendido ficavam só no rodapé em letra miúda —
-  // na prática, invisíveis (apontado pelo Felipe em 05/11).
   const cartoes = [
     { k: 'agendamentos', v: num(ind.agendamentos), s: 'no mês' },
     { k: 'agendamentos_realizados', v: num(ind.agendamentos_realizados), s: 'compareceram' },
@@ -259,14 +277,15 @@ function PainelGestorConteudo() {
     { k: 'sla_vencido', v: num(ind.sla_vencido), s: 'sem primeira resposta' },
   ]
 
+  const COM_LISTA = new Set(['agendamentos', 'agendamentos_realizados', 'vendas'])
+
   return (
     <div className="space-y-4">
       <header className="flex flex-wrap items-end justify-between gap-2">
         <div>
           <h1 className="font-serif text-2xl font-bold text-[#2D2A26]">Painel do gestor</h1>
           <p className="text-xs text-[#6B6560]">
-            Atendimento, agenda e vendas por período. Cada número abre a lista dos casos que o
-            compõem.
+            Atendimento, agenda e vendas por período. Clique num número para ver a lista dos casos.
           </p>
           {painel?.dados_ate && (
             <p className="mt-1 text-xs text-[#B8960E]">
@@ -302,27 +321,51 @@ function PainelGestorConteudo() {
         <p className="text-sm text-[#6B6560]">Calculando…</p>
       ) : (
         <>
-          <section className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <section className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
             {cartoes.map((c) => {
               const d = def.get(c.k)
               const financeiro = FINANCEIROS.has(c.k) && !painel?.pode_ver_financeiro
-              return (
-                <button
-                  key={c.k}
-                  onClick={() => !financeiro && void abrirDetalhe(c.k, d?.label ?? c.k)}
-                  disabled={financeiro}
-                  className="rounded-xl border border-[#F1E5C8] bg-white p-3 text-left transition hover:bg-[#FFF8ED] disabled:opacity-60"
-                >
+              const comLista = COM_LISTA.has(c.k) && !financeiro
+              const conteudo = (
+                <>
                   <div className="text-xl font-bold text-[#2D2A26]">{c.v}</div>
                   <div className="text-[11px] font-semibold uppercase tracking-wide text-[#6B6560]">
                     {d?.label ?? c.k}
                   </div>
                   <div className="mt-0.5 text-[10px] text-[#9B938A]">{c.s}</div>
-                </button>
+                  {comLista && (
+                    <div className="mt-1 text-[10px] font-semibold text-[#B8960E] underline">
+                      ver lista
+                    </div>
+                  )}
+                </>
+              )
+
+              const base =
+                'block rounded-xl border bg-white p-3 text-left transition hover:bg-[#FFF8ED]'
+              const destaque =
+                metricaAberta === c.k
+                  ? 'border-[#B8960E] ring-2 ring-[#B8960E]/30'
+                  : 'border-[#F1E5C8]'
+
+              // LINK de verdade: navegação nativa, sem depender de handler de clique
+              if (comLista) {
+                return (
+                  <Link key={c.k} to={`/painel?m=${c.k}`} className={`${base} ${destaque}`}>
+                    {conteudo}
+                  </Link>
+                )
+              }
+
+              return (
+                <div key={c.k} className={`${base} ${destaque} opacity-90`}>
+                  {conteudo}
+                </div>
               )
             })}
           </section>
 
+          {/* linha de base (CA-08) */}
           {baseline?.existe && (
             <section className="rounded-xl border border-[#F1E5C8] bg-white p-4">
               <div className="flex flex-wrap items-start justify-between gap-2">
@@ -384,6 +427,48 @@ function PainelGestorConteudo() {
             </section>
           )}
 
+          {/* lista dos casos — aberta por LINK, não por modal */}
+          {metricaAberta && (
+            <section
+              id="lista-detalhe"
+              aria-label={`Casos de ${metricaAberta}`}
+              className="scroll-mt-4 rounded-xl border-2 border-[#B8960E] bg-white p-4"
+            >
+              <div className="flex items-start justify-between">
+                <div>
+                  <h2 className="font-serif text-lg font-bold text-[#2D2A26]">
+                    {def.get(metricaAberta)?.label ?? metricaAberta}
+                  </h2>
+                  <p className="text-xs text-[#6B6560]">
+                    {num(ind[metricaAberta])} casos em {periodo} · mostrando até 80
+                  </p>
+                </div>
+                <Link
+                  to="/painel"
+                  className="rounded-lg border border-[#F1E5C8] px-3 py-1.5 text-xs font-semibold text-[#6B6560]"
+                >
+                  Fechar lista
+                </Link>
+              </div>
+              {carregandoDetalhe ? (
+                <p className="mt-3 text-xs text-[#6B6560]">Carregando…</p>
+              ) : detalhe.length === 0 ? (
+                <p className="mt-3 text-xs text-[#6B6560]">
+                  Nenhum caso para listar neste indicador — o total está no cartão.
+                </p>
+              ) : (
+                <ul className="mt-3 max-h-80 divide-y divide-[#F7F0E1] overflow-y-auto text-xs">
+                  {detalhe.map((d, i) => (
+                    <li key={`${d.nome}-${i}`} className="flex justify-between py-1.5">
+                      <span className="text-[#2D2A26]">{d.nome}</span>
+                      <span className="text-[#6B6560]">{d.quando}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          )}
+
           <section className="rounded-xl border border-[#F1E5C8] bg-white p-4">
             <h2 className="mb-1 text-sm font-semibold text-[#2D2A26]">
               Como cada número é calculado
@@ -422,46 +507,6 @@ function PainelGestorConteudo() {
             </div>
           </section>
         </>
-      )}
-
-      {aberto && (
-        <section
-          id="lista-detalhe"
-          aria-label={`Casos de ${aberto.label}`}
-          className="scroll-mt-4 rounded-xl border-2 border-[#B8960E] bg-white p-4"
-        >
-          <div className="flex items-start justify-between">
-            <div>
-              <h2 className="font-serif text-lg font-bold text-[#2D2A26]">{aberto.label}</h2>
-              <p className="text-xs text-[#6B6560]">
-                {detailTotal(aberto.key, ind)} casos em {periodo}
-              </p>
-            </div>
-            <button
-              onClick={() => setAberto(null)}
-              className="rounded-lg border border-[#F1E5C8] px-3 py-1.5 text-xs font-semibold text-[#6B6560]"
-            >
-              Fechar lista
-            </button>
-          </div>
-          {carregandoDetalhe ? (
-            <p className="mt-3 text-xs text-[#6B6560]">Carregando…</p>
-          ) : detalhe.length === 0 ? (
-            <p className="mt-3 text-xs text-[#6B6560]">
-              Lista detalhada disponível para agendamentos e vendas. Para este indicador o total
-              está no cartão.
-            </p>
-          ) : (
-            <ul className="mt-3 max-h-80 divide-y divide-[#F7F0E1] overflow-y-auto text-xs">
-              {detalhe.map((d, i) => (
-                <li key={`${d.nome}-${i}`} className="flex justify-between py-1.5">
-                  <span className="text-[#2D2A26]">{d.nome}</span>
-                  <span className="text-[#6B6560]">{d.quando}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
       )}
     </div>
   )

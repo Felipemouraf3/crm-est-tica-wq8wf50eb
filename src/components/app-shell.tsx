@@ -131,7 +131,7 @@ export function AppShell({ papel, children }: { papel: Papel | null; children: R
           {/* marcador de versão: serve para saber qual build o navegador está usando.
               Se aqui aparecer uma versão antiga, é cache — Ctrl+F5 resolve. */}
           <div className="mt-4 border-t border-[#F1E5C8] pt-3 text-[10px] leading-tight text-[#B8B0A6]">
-            <div data-testid="build-version">versão 0.0.90</div>
+            <div data-testid="build-version">versão 0.0.91</div>
             <button
               onClick={() => {
                 void caches?.keys?.().then((ks) => Promise.all(ks.map((k) => caches.delete(k))))
