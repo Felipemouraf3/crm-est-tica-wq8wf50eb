@@ -19,6 +19,11 @@ const ITENS: Item[] = [
   { rota: '/atendimento', rotulo: 'Atendimento', papeis: 'todos' },
   { rota: '/pacientes/identificar', rotulo: 'Identificar paciente', papeis: 'todos' },
   { rota: '/filas', rotulo: 'Fila de atendimento', papeis: 'todos' },
+  {
+    rota: '/painel',
+    rotulo: 'Painel do gestor',
+    papeis: ['owner', 'clinic_admin', 'manager'],
+  },
   { rota: '/minha-fila', rotulo: 'Minha fila do dia', papeis: 'todos' },
   {
     rota: '/recuperacao',
@@ -126,7 +131,7 @@ export function AppShell({ papel, children }: { papel: Papel | null; children: R
           {/* marcador de versão: serve para saber qual build o navegador está usando.
               Se aqui aparecer uma versão antiga, é cache — Ctrl+F5 resolve. */}
           <div className="mt-4 border-t border-[#F1E5C8] pt-3 text-[10px] leading-tight text-[#B8B0A6]">
-            <div data-testid="build-version">versão 0.0.85</div>
+            <div data-testid="build-version">versão 0.0.86</div>
             <button
               onClick={() => {
                 void caches?.keys?.().then((ks) => Promise.all(ks.map((k) => caches.delete(k))))

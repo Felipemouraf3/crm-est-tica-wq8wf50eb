@@ -17,6 +17,7 @@ import AdminAgentes from './pages/AdminAgentes'
 import AdminDadosExperts from './pages/AdminDadosExperts'
 import AdminCadencias from './pages/AdminCadencias'
 import Recuperacao from './pages/Recuperacao'
+import PainelGestor from './pages/PainelGestor'
 import RedefinirSenha from './pages/RedefinirSenha'
 import AdminFunil from './pages/AdminFunil'
 import Funil from './pages/Funil'
@@ -99,6 +100,15 @@ const App = () => (
               element={
                 <RequireRole papeis={['owner', 'clinic_admin']} exigeMfa>
                   <AdminFunil />
+                </RequireRole>
+              }
+            />
+            {/* P3-S07-T02: painel do gestor (owner/clinic_admin/manager) */}
+            <Route
+              path="/painel"
+              element={
+                <RequireRole papeis={['owner', 'clinic_admin', 'manager']}>
+                  <PainelGestor />
                 </RequireRole>
               }
             />
