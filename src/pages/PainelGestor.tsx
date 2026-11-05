@@ -35,8 +35,30 @@ type Painel = {
 
 const FINANCEIROS = new Set(['vendas_valor_centavos', 'ticket_medio_centavos'])
 
+type BaseLine = {
+  existe: boolean
+  baseline_start?: string
+  baseline_days?: number
+  reference_month?: string
+  reference_appointments?: number
+  reference_sales?: number
+  reference_sales_value_cents?: number
+  is_draft?: boolean
+  pode_validar?: boolean
+  dias_decorridos?: number
+  dias_restantes?: number
+  validated_at?: string | null
+}
+
 function mesISO(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+}
+
+/** Último mês FECHADO: o painel abre nele, não no mês corrente (que tem 2 dias). */
+function mesFechado(): string {
+  const agora = new Date()
+  const anterior = new Date(agora.getFullYear(), agora.getMonth() - 1, 1)
+  return mesISO(anterior)
 }
 
 function primeiroDia(iso: string): string {
@@ -74,10 +96,12 @@ function detailTotal(key: string, ind: Record<string, number>): number {
 
 function PainelGestorConteudo() {
   const { clinicaAtiva: clinica } = useClinicaAtiva()
-  const [periodo, setPeriodo] = useState(mesISO(new Date()))
+  const [periodo, setPeriodo] = useState(mesFechado())
   const [painel, setPainel] = useState<Painel | null>(null)
   const [carregando, setCarregando] = useState(true)
   const [erro, setErro] = useState<string | null>(null)
+  const [baseline, setBaseline] = useState<BaseLine | null>(null)
+  const [validando, setValidando] = useState(false)
   const [aberto, setAberto] = useState<{ key: string; label: string } | null>(null)
   const [detalhe, setDetalhe] = useState<{ nome: string; quando: string }[]>([])
   const [carregandoDetalhe, setCarregandoDetalhe] = useState(false)
@@ -99,6 +123,28 @@ function PainelGestorConteudo() {
   useEffect(() => {
     void carregar()
   }, [carregar])
+
+  const carregarBaseline = useCallback(async () => {
+    if (!clinica) return
+    const { data } = await supabase.rpc('get_baseline', { p_clinic: clinica })
+    setBaseline((data as unknown as BaseLine) ?? null)
+  }, [clinica])
+
+  useEffect(() => {
+    void carregarBaseline()
+  }, [carregarBaseline])
+
+  async function validarBaseline() {
+    if (!clinica) return
+    setValidando(true)
+    const { error } = await supabase.rpc('validate_baseline', { p_clinic: clinica })
+    setValidando(false)
+    if (error) {
+      setErro(error.message)
+      return
+    }
+    await carregarBaseline()
+  }
 
   const ind = painel?.indicadores ?? {}
   const def = useMemo(() => {
