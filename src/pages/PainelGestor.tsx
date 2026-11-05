@@ -216,43 +216,37 @@ function PainelGestorConteudo() {
     )
   }
 
+  // Cada número que o gestor usa para decidir tem o SEU cartão, com o valor grande.
+  // Antes, realizados/cancelados/valor vendido ficavam só no rodapé em letra miúda —
+  // na prática, invisíveis (apontado pelo Felipe em 05/11).
   const cartoes = [
-    {
-      k: 'agendamentos',
-      v: num(ind.agendamentos),
-      s: `${num(ind.agendamentos_realizados)} realizados`,
-    },
+    { k: 'agendamentos', v: num(ind.agendamentos), s: 'no mês' },
+    { k: 'agendamentos_realizados', v: num(ind.agendamentos_realizados), s: 'compareceram' },
     {
       k: 'agendamentos_cancelados',
       v: num(ind.agendamentos_cancelados),
       s: `${pct(ind.agendamentos_cancelados, ind.agendamentos)} do total`,
     },
+    { k: 'avaliacoes', v: num(ind.avaliacoes), s: 'agendadas' },
+    { k: 'avaliacoes_realizadas', v: num(ind.avaliacoes_realizadas), s: 'realizadas' },
+    { k: 'vendas', v: num(ind.vendas), s: 'no mês' },
     {
-      k: 'avaliacoes',
-      v: num(ind.avaliacoes),
-      s: `${num(ind.avaliacoes_realizadas)} realizadas`,
-    },
-    {
-      k: 'vendas',
-      v: num(ind.vendas),
-      s: painel?.pode_ver_financeiro ? brl(ind.vendas_valor_centavos) : 'valor restrito',
+      k: 'vendas_valor_centavos',
+      v: painel?.pode_ver_financeiro ? brl(ind.vendas_valor_centavos) : '—',
+      s: 'faturamento',
     },
     {
       k: 'ticket_medio_centavos',
       v: painel?.pode_ver_financeiro ? brl(ind.ticket_medio_centavos) : '—',
       s: 'média por venda',
     },
-    {
-      k: 'leads',
-      v: num(ind.leads),
-      s: `${num(ind.conversas_novas)} conversas novas`,
-    },
+    { k: 'leads', v: num(ind.leads), s: 'contatos no mês' },
     {
       k: 'mensagens_recebidas',
       v: num(ind.mensagens_recebidas),
       s: `${num(ind.mensagens_enviadas)} enviadas`,
     },
-    { k: 'sla_vencido', v: num(ind.sla_vencido), s: 'primeira resposta' },
+    { k: 'sla_vencido', v: num(ind.sla_vencido), s: 'sem primeira resposta' },
   ]
 
   return (
