@@ -21,6 +21,10 @@ type Caso = {
   evaluated_at: string | null
   professional_name: string | null
   procedure_name: string | null
+  // um agendamento pode ter VÁRIOS procedimentos (avaliação + botox + drenagem)
+  procedures_all: string[] | null
+  had_paid_procedure: boolean
+  paid_procedures: string[] | null
   status: string
   result: string | null
   loss_reason_key: string | null
@@ -230,7 +234,20 @@ function RecuperacaoConteudo() {
                       {c.patient_name ?? 'sem nome'}
                     </td>
                     <td className="px-3 py-2 text-[#6B6560]">{quando(c.evaluated_at)}</td>
-                    <td className="px-3 py-2 text-[#6B6560]">{c.procedure_name ?? '—'}</td>
+                    <td className="px-3 py-2 text-[#6B6560]">
+                      {c.procedure_name ?? '—'}
+                      {c.procedures_all && c.procedures_all.length > 1 && (
+                        <span className="ml-1 text-[10px] text-[#9B938A]">
+                          +{c.procedures_all.length - 1} (
+                          {c.procedures_all.filter((x) => x !== c.procedure_name).join(', ')})
+                        </span>
+                      )}
+                      {c.had_paid_procedure && (
+                        <span className="ml-1 rounded bg-green-100 px-1 text-[9px] font-semibold text-green-800">
+                          fechou junto
+                        </span>
+                      )}
+                    </td>
                     <td className="px-3 py-2 text-[#6B6560]">{c.professional_name ?? '—'}</td>
                     <td className="px-3 py-2">
                       <span
@@ -287,6 +304,11 @@ function RecuperacaoConteudo() {
                   {aberto.procedure_name ?? 'avaliação'} · {quando(aberto.evaluated_at)} ·{' '}
                   {aberto.professional_name ?? '—'}
                 </p>
+                {aberto.procedures_all && aberto.procedures_all.length > 1 && (
+                  <p className="mt-1 rounded bg-[#FFF8ED] px-2 py-1 text-[10px] text-[#B8960E]">
+                    Neste atendimento também: {aberto.procedures_all.join(' · ')}
+                  </p>
+                )}
               </div>
               <button
                 onClick={() => setAberto(null)}
