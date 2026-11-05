@@ -16,6 +16,7 @@ import AdminConhecimento from './pages/AdminConhecimento'
 import AdminAgentes from './pages/AdminAgentes'
 import AdminDadosExperts from './pages/AdminDadosExperts'
 import AdminCadencias from './pages/AdminCadencias'
+import Recuperacao from './pages/Recuperacao'
 import RedefinirSenha from './pages/RedefinirSenha'
 import AdminFunil from './pages/AdminFunil'
 import Funil from './pages/Funil'
@@ -98,6 +99,15 @@ const App = () => (
               element={
                 <RequireRole papeis={['owner', 'clinic_admin']} exigeMfa>
                   <AdminFunil />
+                </RequireRole>
+              }
+            />
+            {/* P3-S06-T02: recuperação de avaliações (comercial e gestão) */}
+            <Route
+              path="/recuperacao"
+              element={
+                <RequireRole papeis={['owner', 'clinic_admin', 'manager', 'sales', 'post_sales']}>
+                  <Recuperacao />
                 </RequireRole>
               }
             />
