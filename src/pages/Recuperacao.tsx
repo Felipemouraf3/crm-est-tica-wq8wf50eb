@@ -36,6 +36,20 @@ type Caso = {
 
 type Motivo = { key: string; label: string }
 
+type Indicador = {
+  de: string
+  ate: string
+  agendadas: number
+  realizadas: number
+  canceladas: number
+  pct_cancelamento: number
+  avaliados: number
+  compraram: number
+  taxa_conversao: number
+  em_recuperacao: number
+  recuperadas: number
+}
+
 const ROTULO_STATUS: Record<string, { texto: string; cor: string }> = {
   open: { texto: 'Aguardando contato', cor: 'bg-amber-100 text-amber-800' },
   result_registered: { texto: 'Resultado registrado', cor: 'bg-blue-100 text-blue-800' },
@@ -67,6 +81,7 @@ function RecuperacaoConteudo() {
   const { clinicaAtiva: clinica } = useClinicaAtiva()
   const [casos, setCasos] = useState<Caso[]>([])
   const [motivos, setMotivos] = useState<Motivo[]>([])
+  const [ind, setInd] = useState<Indicador | null>(null)
   const [filtro, setFiltro] = useState<'open' | 'todos'>('open')
   const [carregando, setCarregando] = useState(true)
   const [erro, setErro] = useState<string | null>(null)
@@ -93,6 +108,18 @@ function RecuperacaoConteudo() {
   useEffect(() => {
     void carregar()
   }, [carregar])
+
+  useEffect(() => {
+    if (!clinica) return
+    ;(async () => {
+      const { data } = await supabase.rpc('evaluation_indicator', {
+        p_clinic: clinica,
+        p_de: null,
+        p_ate: null,
+      })
+      setInd((data as unknown as Indicador) ?? null)
+    })()
+  }, [clinica])
 
   useEffect(() => {
     if (!clinica) return
@@ -204,6 +231,24 @@ function RecuperacaoConteudo() {
         >
           {aviso}
         </div>
+      )}
+
+      {ind && (
+        <section className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-6">
+          {[
+            { r: 'Avaliações agendadas', v: ind.agendadas },
+            { r: 'Realizadas', v: ind.realizadas },
+            { r: 'Canceladas', v: `${ind.canceladas} (${ind.pct_cancelamento}%)` },
+            { r: 'Compraram', v: `${ind.compraram} de ${ind.avaliados}` },
+            { r: 'Conversão', v: `${ind.taxa_conversao}%` },
+            { r: 'Em recuperação', v: ind.em_recuperacao },
+          ].map((k) => (
+            <div key={k.r} className="rounded-xl border border-[#F1E5C8] bg-white p-3">
+              <div className="text-lg font-bold text-[#2D2A26]">{k.v}</div>
+              <div className="text-[10px] uppercase tracking-wide text-[#6B6560]">{k.r}</div>
+            </div>
+          ))}
+        </section>
       )}
 
       {carregando ? (
