@@ -319,6 +319,67 @@ function PainelGestorConteudo() {
             })}
           </section>
 
+          {baseline?.existe && (
+            <section className="rounded-xl border border-[#F1E5C8] bg-white p-4">
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div>
+                  <h2 className="text-sm font-semibold text-[#2D2A26]">Linha de base</h2>
+                  <p className="text-[11px] text-[#6B6560]">
+                    Referência de {baseline.reference_month} · contagem de {baseline.baseline_days}{' '}
+                    dias começou em{' '}
+                    <strong>
+                      {baseline.baseline_start
+                        ? new Date(baseline.baseline_start + 'T12:00:00').toLocaleDateString(
+                            'pt-BR',
+                          )
+                        : '—'}
+                    </strong>
+                    {typeof baseline.dias_decorridos === 'number' && (
+                      <>
+                        {' '}
+                        · {baseline.dias_decorridos} de {baseline.baseline_days} dias (
+                        {baseline.dias_restantes} restantes)
+                      </>
+                    )}
+                  </p>
+                </div>
+                {baseline.is_draft ? (
+                  <button
+                    onClick={() => void validarBaseline()}
+                    disabled={validando || !baseline.pode_validar}
+                    className="rounded-lg bg-[#B8960E] px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
+                  >
+                    {validando ? 'Validando…' : 'Validar linha de base'}
+                  </button>
+                ) : (
+                  <span className="rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-semibold text-green-800">
+                    validada
+                  </span>
+                )}
+              </div>
+              <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+                <div>
+                  <div className="text-sm font-bold text-[#2D2A26]">
+                    {num(baseline.reference_appointments)}
+                  </div>
+                  <div className="text-[10px] uppercase text-[#6B6560]">agendamentos</div>
+                </div>
+                <div>
+                  <div className="text-sm font-bold text-[#2D2A26]">
+                    {num(baseline.reference_sales)}
+                  </div>
+                  <div className="text-[10px] uppercase text-[#6B6560]">vendas</div>
+                </div>
+                <div>
+                  <div className="text-sm font-bold text-[#2D2A26]">
+                    {brl(baseline.reference_sales_value_cents)}
+                  </div>
+                  <div className="text-[10px] uppercase text-[#6B6560]">valor vendido</div>
+                </div>
+              </div>
+            </section>
+          )}
+
           <section className="rounded-xl border border-[#F1E5C8] bg-white p-4">
             <h2 className="mb-1 text-sm font-semibold text-[#2D2A26]">
               Como cada número é calculado
