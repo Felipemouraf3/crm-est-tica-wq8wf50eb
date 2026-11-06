@@ -97,8 +97,13 @@ function toRow(s: any, mapa: Record<string, string>) {
     buyer_phone_e164: buyer?.phone ?? null,
     seller_expert_uuid: seller,
     items_json: s.items ?? [],
-    final_amount_cents: Math.round(Number(s.final_amount ?? s.amount ?? 0) * (String(s.final_amount ?? '').includes('.') ? 100 : 1)),
-    discount_cents: Math.round(Number(s.discount_amount ?? 0) * (String(s.discount_amount ?? '').includes('.') ? 100 : 1)),
+    final_amount_cents: Math.round(
+      Number(s.final_amount ?? s.amount ?? 0) *
+        (String(s.final_amount ?? '').includes('.') ? 100 : 1),
+    ),
+    discount_cents: Math.round(
+      Number(s.discount_amount ?? 0) * (String(s.discount_amount ?? '').includes('.') ? 100 : 1),
+    ),
     generate_credits: Boolean(s.generate_credits ?? false),
     synced_at: new Date().toISOString(),
   }
@@ -142,7 +147,9 @@ Deno.serve(async (req) => {
         const j = await ceGet(`/sales?starts_at=${ini}&ends_at=${fim}&page=${page}`, token)
         of = j.meta?.of ?? 0
         last = j.meta?.last_page ?? 1
-        const rows = (j.data ?? []).map((s: any) => toRow(s, mapa)).filter((r: any) => !vistos.has(r.expert_uuid))
+        const rows = (j.data ?? [])
+          .map((s: any) => toRow(s, mapa))
+          .filter((r: any) => !vistos.has(r.expert_uuid))
         for (const r of rows) vistos.add(r.expert_uuid)
 
         for (let i = 0; i < rows.length; i += 200) {
@@ -160,15 +167,20 @@ Deno.serve(async (req) => {
       } while (page <= last)
       janelas.push(`${a}-${String(m).padStart(2, '0')}: api_of=${of}`)
       m++
-      if (m > 12) { m = 1; a++ }
+      if (m > 12) {
+        m = 1
+        a++
+      }
     }
 
     await sb('/rest/v1/sync_cursors?resource=eq.sales', {
       method: 'PATCH',
       headers: { Prefer: 'return=minimal' },
       body: JSON.stringify({
-        status: 'ok', last_success_at: new Date().toISOString(),
-        last_attempt_at: new Date().toISOString(), last_error: null,
+        status: 'ok',
+        last_success_at: new Date().toISOString(),
+        last_attempt_at: new Date().toISOString(),
+        last_error: null,
       }),
     })
 
@@ -178,7 +190,8 @@ Deno.serve(async (req) => {
       method: 'PATCH',
       headers: { Prefer: 'return=minimal' },
       body: JSON.stringify({
-        status: 'falha', last_attempt_at: new Date().toISOString(),
+        status: 'falha',
+        last_attempt_at: new Date().toISOString(),
         last_error: String(e).slice(0, 300),
       }),
     })

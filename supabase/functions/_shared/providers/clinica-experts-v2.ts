@@ -12,7 +12,12 @@ export class ErroOperacional extends Error {
   code: string
   correlationId: string
   detalhe: Record<string, unknown>
-  constructor(code: string, mensagem: string, correlationId: string, detalhe: Record<string, unknown> = {}) {
+  constructor(
+    code: string,
+    mensagem: string,
+    correlationId: string,
+    detalhe: Record<string, unknown> = {},
+  ) {
     super(mensagem)
     this.name = 'ErroOperacional'
     this.code = code
@@ -24,13 +29,18 @@ export class ErroOperacional extends Error {
 type Budget = { stamps: number[]; restanteServidor: number | null; virada: number | null }
 const budgets = new Map<string, Budget>()
 
-export function resetRateBudget() { budgets.clear() }
+export function resetRateBudget() {
+  budgets.clear()
+}
 
 export const rateBudget = {
   take(connectionId: string): number {
     const agora = Date.now()
     let b = budgets.get(connectionId)
-    if (!b) { b = { stamps: [], restanteServidor: null, virada: null }; budgets.set(connectionId, b) }
+    if (!b) {
+      b = { stamps: [], restanteServidor: null, virada: null }
+      budgets.set(connectionId, b)
+    }
     while (b.stamps.length && agora - b.stamps[0] > 60_000) b.stamps.shift()
     if (b.stamps.length >= BUDGET_POR_MIN) return 60_000 - (agora - b.stamps[0]) + 5
     if (b.restanteServidor !== null && b.restanteServidor < REstanteMin && b.virada) {
@@ -77,12 +87,18 @@ export function classifyExpertError(status: number, corpo: CorpoErro): string {
 
 export function httpDeErro(code: string): number {
   switch (code) {
-    case 'paciente_nao_encontrado': return 404
-    case 'entrada_recusada': return 400
-    case 'modulo_desabilitado': return 503
-    case 'limite_externo': return 503
-    case 'tempo_esgotado': return 504
-    default: return 502
+    case 'paciente_nao_encontrado':
+      return 404
+    case 'entrada_recusada':
+      return 400
+    case 'modulo_desabilitado':
+      return 503
+    case 'limite_externo':
+      return 503
+    case 'tempo_esgotado':
+      return 504
+    default:
+      return 502
   }
 }
 
@@ -104,7 +120,11 @@ export async function expertGet(
   opcoes: Record<string, unknown> = {},
 ): Promise<ExpertGetResult> {
   if (!baseUrl || !token) {
-    throw new ErroOperacional('credencial_invalida', 'Conexão não configurada (base ou token ausente).', opcoes.correlationId ?? '-')
+    throw new ErroOperacional(
+      'credencial_invalida',
+      'Conexão não configurada (base ou token ausente).',
+      opcoes.correlationId ?? '-',
+    )
   }
   const connectionId = (opcoes.connectionId as string) ?? 'principal'
   const correlationId = (opcoes.correlationId as string) ?? crypto.randomUUID()
@@ -125,27 +145,48 @@ export async function expertGet(
     const timer = setTimeout(() => controller.abort(), timeoutMs)
     try {
       const qs = new URLSearchParams(query).toString()
-      const resp = await fetch(`${baseUrl.replace(/\/$/, '')}/${caminho.replace(/^\//, '')}${qs ? `?${qs}` : ''}`, {
-        method: 'GET',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: 'application/json',
-          'User-Agent': EXPERT_USER_AGENT,
-          'x-correlation-id': correlationId,
+      const resp = await fetch(
+        `${baseUrl.replace(/\/$/, '')}/${caminho.replace(/^\//, '')}${qs ? `?${qs}` : ''}`,
+        {
+          method: 'GET',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: 'application/json',
+            'User-Agent': EXPERT_USER_AGENT,
+            'x-correlation-id': correlationId,
+          },
+          signal: controller.signal,
         },
-        signal: controller.signal,
-      })
+      )
       clearTimeout(timer)
       rateBudget.updateFromHeaders(connectionId, resp.headers)
       const texto = await resp.text()
       let corpo: CorpoErro & { data?: unknown; meta?: unknown } = {}
-      try { corpo = texto ? JSON.parse(texto) : {} } catch { corpo = {} }
+      try {
+        corpo = texto ? JSON.parse(texto) : {}
+      } catch {
+        corpo = {}
+      }
       if (resp.ok) {
-        return { status: resp.status, data: corpo.data ?? corpo, meta: corpo.meta ?? null, headers: resp.headers, telemetria: { status: 'ok', duracao_ms: Date.now() - t0, tentativas: tentativa, correlation_id: correlationId } }
+        return {
+          status: resp.status,
+          data: corpo.data ?? corpo,
+          meta: corpo.meta ?? null,
+          headers: resp.headers,
+          telemetria: {
+            status: 'ok',
+            duracao_ms: Date.now() - t0,
+            tentativas: tentativa,
+            correlation_id: correlationId,
+          },
+        }
       }
       const code = classifyExpertError(resp.status, corpo)
       if (!RETENTAVEIS.has(code) || tentativa >= maxTentativas) {
-        throw new ErroOperacional(code, mensagemDe(code, resp.status), correlationId, { http_status: resp.status, fields: (corpo?.error as { fields?: unknown })?.fields ?? undefined })
+        throw new ErroOperacional(code, mensagemDe(code, resp.status), correlationId, {
+          http_status: resp.status,
+          fields: (corpo?.error as { fields?: unknown })?.fields ?? undefined,
+        })
       }
       await new Promise((r) => setTimeout(r, BACKOFF_MS * 2 ** (tentativa - 1)))
     } catch (e: unknown) {
@@ -153,11 +194,21 @@ export async function expertGet(
       if (e instanceof ErroOperacional) throw e
       const nome = (e as { name?: string })?.name ?? ''
       if (nome === 'AbortError') {
-        if (tentativa >= maxTentativas) throw new ErroOperacional('tempo_esgotado', `Tempo esgotado após ${timeoutMs} ms.`, correlationId)
+        if (tentativa >= maxTentativas)
+          throw new ErroOperacional(
+            'tempo_esgotado',
+            `Tempo esgotado após ${timeoutMs} ms.`,
+            correlationId,
+          )
         await new Promise((r) => setTimeout(r, BACKOFF_MS * 2 ** (tentativa - 1)))
         continue
       }
-      if (tentativa >= maxTentativas) throw new ErroOperacional('falha_transitoria', 'Falha de rede ao contatar a API.', correlationId)
+      if (tentativa >= maxTentativas)
+        throw new ErroOperacional(
+          'falha_transitoria',
+          'Falha de rede ao contatar a API.',
+          correlationId,
+        )
       await new Promise((r) => setTimeout(r, BACKOFF_MS * 2 ** (tentativa - 1)))
     }
   }
@@ -166,14 +217,22 @@ export async function expertGet(
 
 function mensagemDe(code: string, httpStatus: number): string {
   switch (code) {
-    case 'credencial_invalida': return 'Credencial rejeitada pela API (401).'
-    case 'bloqueio_de_borda': return 'Acesso bloqueado pela borda da API (verificar User-Agent/assinatura).'
-    case 'modulo_desabilitado': return 'Módulo desabilitado na API Clínica Experts.'
-    case 'paciente_nao_encontrado': return 'Paciente não encontrado (404 API0011).'
-    case 'entrada_recusada': return 'Entrada rejeitada pela API (422 API0422).'
-    case 'limite_externo': return 'Limite de taxa da API atingido (429).'
-    case 'falha_transitoria': return `Serviço externo indisponível (HTTP ${httpStatus}).`
-    default: return `Resposta inesperada da API (HTTP ${httpStatus}).`
+    case 'credencial_invalida':
+      return 'Credencial rejeitada pela API (401).'
+    case 'bloqueio_de_borda':
+      return 'Acesso bloqueado pela borda da API (verificar User-Agent/assinatura).'
+    case 'modulo_desabilitado':
+      return 'Módulo desabilitado na API Clínica Experts.'
+    case 'paciente_nao_encontrado':
+      return 'Paciente não encontrado (404 API0011).'
+    case 'entrada_recusada':
+      return 'Entrada rejeitada pela API (422 API0422).'
+    case 'limite_externo':
+      return 'Limite de taxa da API atingido (429).'
+    case 'falha_transitoria':
+      return `Serviço externo indisponível (HTTP ${httpStatus}).`
+    default:
+      return `Resposta inesperada da API (HTTP ${httpStatus}).`
   }
 }
 
@@ -187,7 +246,8 @@ export type ExpertPatientMin = {
 }
 
 export function lerPacienteMinimo(bruto: Record<string, unknown>): ExpertPatientMin | null {
-  const uuid = typeof bruto?.id === 'string' ? bruto.id : typeof bruto?.uuid === 'string' ? bruto.uuid : null
+  const uuid =
+    typeof bruto?.id === 'string' ? bruto.id : typeof bruto?.uuid === 'string' ? bruto.uuid : null
   if (!uuid) return null
   return {
     expert_patient_uuid: uuid,

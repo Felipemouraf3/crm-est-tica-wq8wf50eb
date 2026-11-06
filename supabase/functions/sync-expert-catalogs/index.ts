@@ -136,11 +136,14 @@ Deno.serve(async (req) => {
         active: p.active !== false,
         synced_at: agora,
       }))
-      const up = await sb('/rest/v1/expert_professionals_cache?on_conflict=organization_id,expert_uuid', {
-        method: 'POST',
-        headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
-        body: JSON.stringify(linhas),
-      })
+      const up = await sb(
+        '/rest/v1/expert_professionals_cache?on_conflict=organization_id,expert_uuid',
+        {
+          method: 'POST',
+          headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
+          body: JSON.stringify(linhas),
+        },
+      )
       if (!up.ok) throw new Error(`upsert: ${up.status} ${(await up.text()).slice(0, 200)}`)
       const presentes = validos.map((p) => String(p.uuid))
       const desativados = await desativarAusentes('professionals', presentes)
@@ -166,11 +169,14 @@ Deno.serve(async (req) => {
         active: p.active !== false,
         synced_at: agora,
       }))
-      const up = await sb('/rest/v1/expert_procedures_cache?on_conflict=organization_id,expert_id', {
-        method: 'POST',
-        headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
-        body: JSON.stringify(linhas),
-      })
+      const up = await sb(
+        '/rest/v1/expert_procedures_cache?on_conflict=organization_id,expert_id',
+        {
+          method: 'POST',
+          headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
+          body: JSON.stringify(linhas),
+        },
+      )
       if (!up.ok) throw new Error(`upsert: ${up.status} ${(await up.text()).slice(0, 200)}`)
       const desativados = await desativarAusentes(
         'procedures',
@@ -201,7 +207,10 @@ Deno.serve(async (req) => {
         body: JSON.stringify(linhas),
       })
       if (!up.ok) throw new Error(`upsert: ${up.status} ${(await up.text()).slice(0, 200)}`)
-      const desativadas = await desativarAusentes('rooms', validas.map((r) => String(r.id)))
+      const desativadas = await desativarAusentes(
+        'rooms',
+        validas.map((r) => String(r.id)),
+      )
       await marcarCursor('rooms', true)
       resultado.salas = linhas.length
       resultado.salas_desativadas = desativadas

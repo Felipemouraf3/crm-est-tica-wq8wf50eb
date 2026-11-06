@@ -4,7 +4,10 @@ import { expertGet, lerPacienteMinimo, type ExpertPatientMin } from './clinica-e
 export type ClasseBusca = 'um' | 'multiplos' | 'provavel' | 'zero'
 export type Candidato = ExpertPatientMin & { birth_masked: string | null }
 
-export type HttpGetFn = (caminho: string, query: Record<string, string>) => Promise<{ status: number; data: unknown }>
+export type HttpGetFn = (
+  caminho: string,
+  query: Record<string, string>,
+) => Promise<{ status: number; data: unknown }>
 export type BudgetLocal = { take: () => number; marcar: () => void }
 
 const dormir = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
@@ -30,7 +33,9 @@ export function criarBudgetLocal(porMinuto = 90, janelaMs = 60_000): BudgetLocal
       if (stamps.length >= porMinuto) return janelaMs - (agora - stamps[0]) + 5
       return 0
     },
-    marcar() { stamps.push(Date.now()) },
+    marcar() {
+      stamps.push(Date.now())
+    },
   }
 }
 
@@ -52,7 +57,10 @@ export async function buscarEmDuasEtapas(
   const httpGet: HttpGetFn =
     opcoes.httpGet ??
     ((caminho, query) =>
-      expertGet(baseUrl, token, caminho, query, { connectionId: opcoes.connectionId ?? 'principal', correlationId }).then((r) => ({ status: r.status, data: r.data })))
+      expertGet(baseUrl, token, caminho, query, {
+        connectionId: opcoes.connectionId ?? 'principal',
+        correlationId,
+      }).then((r) => ({ status: r.status, data: r.data })))
   const budget: BudgetLocal | null = opcoes.budget ?? null
 
   const chamar = async (caminho: string, query: Record<string, string>) => {
@@ -65,11 +73,15 @@ export async function buscarEmDuasEtapas(
   }
 
   const paraCandidatos = (lista: unknown[]): Candidato[] =>
-    lista.map((p) => lerPacienteMinimo(p as Record<string, unknown>)).filter((p): p is ExpertPatientMin => p !== null).map((p) => ({ ...p, birth_masked: mascararNascimento(p.birth_date) }))
+    lista
+      .map((p) => lerPacienteMinimo(p as Record<string, unknown>))
+      .filter((p): p is ExpertPatientMin => p !== null)
+      .map((p) => ({ ...p, birth_masked: mascararNascimento(p.birth_date) }))
 
   const extrairLista = (data: unknown): unknown[] => {
     if (Array.isArray(data)) return data
-    if (data && typeof data === 'object' && Array.isArray((data as any).data)) return (data as any).data
+    if (data && typeof data === 'object' && Array.isArray((data as any).data))
+      return (data as any).data
     return []
   }
 
@@ -83,11 +95,32 @@ export async function buscarEmDuasEtapas(
   }
   const pacientesA = paraCandidatos(extrairLista(ra.data))
 
-  if (pacientesA.length === 1) return { result_class: 'um', phone_e164: phoneE164, candidatos: pacientesA, etapas: { a: true, b: false }, telemetria: { etapas: 1, correlation_id: correlationId } }
-  if (pacientesA.length >= 2) return { result_class: 'multiplos', phone_e164: phoneE164, candidatos: pacientesA, etapas: { a: true, b: false }, telemetria: { etapas: 1, correlation_id: correlationId } }
+  if (pacientesA.length === 1)
+    return {
+      result_class: 'um',
+      phone_e164: phoneE164,
+      candidatos: pacientesA,
+      etapas: { a: true, b: false },
+      telemetria: { etapas: 1, correlation_id: correlationId },
+    }
+  if (pacientesA.length >= 2)
+    return {
+      result_class: 'multiplos',
+      phone_e164: phoneE164,
+      candidatos: pacientesA,
+      etapas: { a: true, b: false },
+      telemetria: { etapas: 1, correlation_id: correlationId },
+    }
 
   const temNonoDigito = /^\+55\d{11}$/.test(phoneE164)
-  if (!temNonoDigito) return { result_class: 'zero', phone_e164: phoneE164, candidatos: [], etapas: { a: true, b: false }, telemetria: { etapas: 1, correlation_id: correlationId } }
+  if (!temNonoDigito)
+    return {
+      result_class: 'zero',
+      phone_e164: phoneE164,
+      candidatos: [],
+      etapas: { a: true, b: false },
+      telemetria: { etapas: 1, correlation_id: correlationId },
+    }
 
   const ultimos8 = digitos.slice(-8)
   const rb = await chamar('patients', { phone: ultimos8, per_page: '50' })
@@ -98,8 +131,23 @@ export async function buscarEmDuasEtapas(
     throw e
   }
   const ddd = dddDe(phoneE164)
-  const mesmoDdd = paraCandidatos(extrairLista(rb.data)).filter((p) => p.phone_e164 && dddDe(p.phone_e164) === ddd)
+  const mesmoDdd = paraCandidatos(extrairLista(rb.data)).filter(
+    (p) => p.phone_e164 && dddDe(p.phone_e164) === ddd,
+  )
 
-  if (mesmoDdd.length >= 1) return { result_class: 'provavel', phone_e164: phoneE164, candidatos: mesmoDdd, etapas: { a: true, b: true }, telemetria: { etapas: 2, correlation_id: correlationId } }
-  return { result_class: 'zero', phone_e164: phoneE164, candidatos: [], etapas: { a: true, b: true }, telemetria: { etapas: 2, correlation_id: correlationId } }
+  if (mesmoDdd.length >= 1)
+    return {
+      result_class: 'provavel',
+      phone_e164: phoneE164,
+      candidatos: mesmoDdd,
+      etapas: { a: true, b: true },
+      telemetria: { etapas: 2, correlation_id: correlationId },
+    }
+  return {
+    result_class: 'zero',
+    phone_e164: phoneE164,
+    candidatos: [],
+    etapas: { a: true, b: true },
+    telemetria: { etapas: 2, correlation_id: correlationId },
+  }
 }

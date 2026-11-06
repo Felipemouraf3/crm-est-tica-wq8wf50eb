@@ -10,7 +10,11 @@ const CLIENT_REF = 'vault:562b6a58-9671-4143-9083-271227e53bd0'
 async function segredo(ref: string): Promise<string> {
   const r = await fetch(`${SUPABASE_URL}/rest/v1/rpc/_edge_read_secret`, {
     method: 'POST',
-    headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json' },
+    headers: {
+      apikey: SERVICE_KEY,
+      Authorization: `Bearer ${SERVICE_KEY}`,
+      'Content-Type': 'application/json',
+    },
     body: JSON.stringify({ p_secret_ref: ref }),
   })
   if (!r.ok) return ''
@@ -42,5 +46,7 @@ Deno.serve(async () => {
     out.device = { erro: String(e) }
   }
 
-  return new Response(JSON.stringify(out, null, 1), { headers: { 'Content-Type': 'application/json' } })
+  return new Response(JSON.stringify(out, null, 1), {
+    headers: { 'Content-Type': 'application/json' },
+  })
 })

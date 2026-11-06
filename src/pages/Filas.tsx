@@ -114,12 +114,24 @@ export default function Filas() {
         .order('created_at', { ascending: true }),
       supabase
         .from('attendant_presence')
-        .select('user_id, state, active_load, profiles(name)')
+        .select('user_id, state, active_load')
         .eq('clinic_id', clinic),
       supabase.rpc('admin_sugestao_stats', { p_clinic: clinic, p_dias: 30 }),
     ])
     setTickets((t.data ?? []) as Ticket[])
-    setAtendentes((a.data ?? []) as Atendente[])
+    // attendant_presence.user_id aponta para auth.users (sem FK para profiles),
+    // então o nome do atendente vem de uma segunda consulta a profiles.
+    const presencas = (a.data ?? []) as { user_id: string; state: string; active_load: number }[]
+    const ids = [...new Set(presencas.map((p) => p.user_id))]
+    let nomes: { id: string; name: string }[] = []
+    if (ids.length > 0) {
+      const { data: perfis } = await supabase.from('profiles').select('id, name').in('id', ids)
+      nomes = (perfis ?? []) as { id: string; name: string }[]
+    }
+    const nomePorId = new Map(nomes.map((p) => [p.id, p.name]))
+    setAtendentes(
+      presencas.map((p) => ({ ...p, profiles: { name: nomePorId.get(p.user_id) ?? '' } })),
+    )
     const linha = Array.isArray(st.data) ? st.data[0] : st.data
     setStats((linha ?? null) as typeof stats)
     setCarregando(false)

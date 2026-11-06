@@ -22,7 +22,10 @@ Deno.serve(async (req: Request) => {
 
     const authHeader = req.headers.get('Authorization') ?? ''
     if (!authHeader.startsWith('Bearer ') || authHeader === 'Bearer ') {
-      return json(401, { error: { code: 'nao_autenticado', message: 'Sessão necessária' }, correlation_id: correlationId })
+      return json(401, {
+        error: { code: 'nao_autenticado', message: 'Sessão necessária' },
+        correlation_id: correlationId,
+      })
     }
     const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? ''
     const userClient = createClient(SUPABASE_URL, Deno.env.get('SUPABASE_ANON_KEY') ?? '', {
@@ -30,20 +33,48 @@ Deno.serve(async (req: Request) => {
     })
     const { data: userData } = await userClient.auth.getUser()
     if (!userData?.user?.id) {
-      return json(401, { error: { code: 'nao_autenticado', message: 'Sessão necessária' }, correlation_id: correlationId })
+      return json(401, {
+        error: { code: 'nao_autenticado', message: 'Sessão necessária' },
+        correlation_id: correlationId,
+      })
     }
 
     const body = await req.json().catch(() => ({}))
-    const { clinic_id, channel_account_id, to_phone, kind, test_body, template_name, template_language, origin: originBody } = body
+    const {
+      clinic_id,
+      channel_account_id,
+      to_phone,
+      kind,
+      test_body,
+      template_name,
+      template_language,
+      origin: originBody,
+    } = body
     if (!clinic_id || !channel_account_id || !to_phone || !['text', 'template'].includes(kind)) {
-      return json(400, { error: { code: 'entrada_invalida', message: 'clinic_id, channel_account_id, to_phone e kind são obrigatórios' }, correlation_id: correlationId })
+      return json(400, {
+        error: {
+          code: 'entrada_invalida',
+          message: 'clinic_id, channel_account_id, to_phone e kind são obrigatórios',
+        },
+        correlation_id: correlationId,
+      })
     }
-    const origin = ['human','auto_reply','followup','campaign','system_test'].includes(originBody) ? originBody : 'human'
+    const origin = ['human', 'auto_reply', 'followup', 'campaign', 'system_test'].includes(
+      originBody,
+    )
+      ? originBody
+      : 'human'
     if (kind === 'text' && !test_body) {
-      return json(400, { error: { code: 'entrada_invalida', message: 'test_body é obrigatório para texto' }, correlation_id: correlationId })
+      return json(400, {
+        error: { code: 'entrada_invalida', message: 'test_body é obrigatório para texto' },
+        correlation_id: correlationId,
+      })
     }
     if (kind === 'template' && !template_name) {
-      return json(400, { error: { code: 'entrada_invalida', message: 'template_name é obrigatório para modelo' }, correlation_id: correlationId })
+      return json(400, {
+        error: { code: 'entrada_invalida', message: 'template_name é obrigatório para modelo' },
+        correlation_id: correlationId,
+      })
     }
 
     // acesso: membro da clínica (RLS decide na leitura)
@@ -54,18 +85,29 @@ Deno.serve(async (req: Request) => {
       .eq('clinic_id', clinic_id)
       .maybeSingle()
     if (!conta) {
-      return json(403, { error: { code: 'sem_permissao', message: 'Canal não encontrado nesta clínica' }, correlation_id: correlationId })
+      return json(403, {
+        error: { code: 'sem_permissao', message: 'Canal não encontrado nesta clínica' },
+        correlation_id: correlationId,
+      })
     }
 
     // conta precisa estar ativa (RN-P2-S03-07: desconectada não envia)
     if (conta.status !== 'active') {
-      return json(422, { error: { code: 'regra_de_negocio', message: `Conta ${conta.status} — envio não permitido` }, correlation_id: correlationId })
+      return json(422, {
+        error: { code: 'regra_de_negocio', message: `Conta ${conta.status} — envio não permitido` },
+        correlation_id: correlationId,
+      })
     }
 
     // destino em E.164 (RPC server-side)
-    const { data: toE164, error: normErr } = await userClient.rpc('normalize_e164', { p_raw: to_phone })
+    const { data: toE164, error: normErr } = await userClient.rpc('normalize_e164', {
+      p_raw: to_phone,
+    })
     if (normErr || !toE164) {
-      return json(400, { error: { code: 'entrada_invalida', message: 'Telefone de destino inválido' }, correlation_id: correlationId })
+      return json(400, {
+        error: { code: 'entrada_invalida', message: 'Telefone de destino inválido' },
+        correlation_id: correlationId,
+      })
     }
 
     // contato do destino (para a conferência de recusa)
@@ -110,7 +152,10 @@ Deno.serve(async (req: Request) => {
           },
           { onConflict: 'idempotency_key' },
         )
-        return json(422, { error: { code: 'regra_de_negocio', message: 'Contato recusou mensagens promocionais' }, correlation_id: correlationId })
+        return json(422, {
+          error: { code: 'regra_de_negocio', message: 'Contato recusou mensagens promocionais' },
+          correlation_id: correlationId,
+        })
       }
     }
 
@@ -145,19 +190,33 @@ Deno.serve(async (req: Request) => {
           },
           { onConflict: 'idempotency_key' },
         )
-        return json(422, { error: { code: 'regra_de_negocio', message: 'Fora da janela de 24h — use um modelo aprovado' }, correlation_id: correlationId })
+        return json(422, {
+          error: {
+            code: 'regra_de_negocio',
+            message: 'Fora da janela de 24h — use um modelo aprovado',
+          },
+          correlation_id: correlationId,
+        })
       }
     }
 
     // idempotência e gravação do pedido
-    const idem = await idempotencyKey(conta.id, toE164, kind, kind === 'text' ? test_body : `${template_name}:${template_language ?? ''}`)
+    const idem = await idempotencyKey(
+      conta.id,
+      toE164,
+      kind,
+      kind === 'text' ? test_body : `${template_name}:${template_language ?? ''}`,
+    )
     const { data: existente } = await admin(SUPABASE_URL)
       .from('outbound_requests')
       .select('id, status')
       .eq('idempotency_key', idem)
       .maybeSingle()
     if (existente) {
-      return json(200, { data: { outbound_request_id: existente.id, status: existente.status, duplicado: true }, correlation_id: correlationId })
+      return json(200, {
+        data: { outbound_request_id: existente.id, status: existente.status, duplicado: true },
+        correlation_id: correlationId,
+      })
     }
 
     const { data: novo, error: errIns } = await admin(SUPABASE_URL)
@@ -178,25 +237,36 @@ Deno.serve(async (req: Request) => {
       .select('id')
       .single()
     if (errIns || !novo) {
-      return json(500, { error: { code: 'inesperado', message: 'Falha ao registrar envio' }, correlation_id: correlationId })
+      return json(500, {
+        error: { code: 'inesperado', message: 'Falha ao registrar envio' },
+        correlation_id: correlationId,
+      })
     }
 
-    await admin(SUPABASE_URL).schema('pgmq').rpc('send', {
-      queue_name: 'outbound_messages',
-      msg: {
-        type: 'outbound_send',
-        organization_id: conta.organization_id,
-        clinic_id: conta.clinic_id,
-        ref_id: novo.id,
-        correlation_id: correlationId,
-        attempt: 1,
-        enqueued_at: new Date().toISOString(),
-      },
-    })
+    await admin(SUPABASE_URL)
+      .schema('pgmq')
+      .rpc('send', {
+        queue_name: 'outbound_messages',
+        msg: {
+          type: 'outbound_send',
+          organization_id: conta.organization_id,
+          clinic_id: conta.clinic_id,
+          ref_id: novo.id,
+          correlation_id: correlationId,
+          attempt: 1,
+          enqueued_at: new Date().toISOString(),
+        },
+      })
 
-    return json(200, { data: { outbound_request_id: novo.id, status: 'queued' }, correlation_id: correlationId })
+    return json(200, {
+      data: { outbound_request_id: novo.id, status: 'queued' },
+      correlation_id: correlationId,
+    })
   } catch (e) {
-    return json(500, { error: { code: 'inesperado', message: 'Erro interno' }, correlation_id: correlationId })
+    return json(500, {
+      error: { code: 'inesperado', message: 'Erro interno' },
+      correlation_id: correlationId,
+    })
   }
 })
 
@@ -204,9 +274,16 @@ function admin(supabaseUrl: string) {
   return createClient(supabaseUrl, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '')
 }
 
-async function idempotencyKey(channelId: string, to: string, kind: string, conteudo: string): Promise<string> {
+async function idempotencyKey(
+  channelId: string,
+  to: string,
+  kind: string,
+  conteudo: string,
+): Promise<string> {
   const minuto = Math.floor(Date.now() / 60_000)
   const base = `${channelId}|${to}|${kind}|${conteudo}|${minuto}`
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(base))
-  return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, '0')).join('')
+  return Array.from(new Uint8Array(digest))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('')
 }

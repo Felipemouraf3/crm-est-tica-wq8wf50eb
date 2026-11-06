@@ -29,7 +29,7 @@ type Versao = {
   sandbox_ok: boolean
   published_at: string | null
   created_at: string
-  origem: 'propria' | 'organizacao'
+  origem: string
 }
 
 type Efetivo = {
@@ -37,6 +37,13 @@ type Efetivo = {
   version: number
   content: string
   allowed_variables: string[]
+}
+
+type SandboxResultado = {
+  ok: boolean
+  casos: number
+  validos: number
+  bloqueados: number
 }
 
 const INTENCOES = [
@@ -71,12 +78,7 @@ export default function AdminAgentes() {
   const [versoes, setVersoes] = useState<Versao[]>([])
   const [rascunhoId, setRascunhoId] = useState<string | null>(null)
   const [texto, setTexto] = useState('')
-  const [sandbox, setSandbox] = useState<{
-    ok: boolean
-    casos: number
-    validos: number
-    bloqueados: number
-  } | null>(null)
+  const [sandbox, setSandbox] = useState<SandboxResultado | null>(null)
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
@@ -235,7 +237,7 @@ export default function AdminAgentes() {
       toast({ title: 'Falha no sandbox', description: error.message, variant: 'destructive' })
       return
     }
-    const r = Array.isArray(data) ? data[0] : data
+    const r = (Array.isArray(data) ? data[0] : data) as SandboxResultado | null
     setSandbox(r)
     toast({
       title: r?.ok ? 'Sandbox 10/10 — pode publicar' : 'Sandbox reprovado',

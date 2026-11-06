@@ -50,7 +50,9 @@ type ZapiBody = Record<string, unknown> & {
 
 export function paraE164Zapi(phone: string | undefined | null): string | null {
   if (!phone) return null
-  const digitos = String(phone).replace(/@c\.us$/, '').replace(/\D/g, '')
+  const digitos = String(phone)
+    .replace(/@c\.us$/, '')
+    .replace(/\D/g, '')
   if (!/^\d{10,15}$/.test(digitos)) return null
   return `+${digitos}`
 }
@@ -78,10 +80,14 @@ export function statusZapiParaInterno(status: string | undefined): string | null
 
 function midiaIdDe(msg: ZapiBody): { tipo: string; id: string } | null {
   for (const tipo of ['image', 'audio', 'video', 'document'] as const) {
-    const obj = msg[tipo] as { id?: string; imageUrl?: string; link?: string; url?: string } | undefined
+    const obj = msg[tipo] as
+      | { id?: string; imageUrl?: string; link?: string; url?: string }
+      | undefined
     if (!obj || typeof obj !== 'object') continue
     // Z-API real: image.imageUrl (sem id); doc oficial também aceita link/url.
-    const id = [obj.id, obj.imageUrl, obj.link, obj.url].find((v) => typeof v === 'string' && v !== '')
+    const id = [obj.id, obj.imageUrl, obj.link, obj.url].find(
+      (v) => typeof v === 'string' && v !== '',
+    )
     if (id) return { tipo, id }
   }
   return null
@@ -89,12 +95,18 @@ function midiaIdDe(msg: ZapiBody): { tipo: string; id: string } | null {
 
 export function mapearCorpoZapi(
   corpo: ZapiBody,
-  conta: { id: string; organization_id: string; clinic_id: string; external_account_id: string } | null,
+  conta: {
+    id: string
+    organization_id: string
+    clinic_id: string
+    external_account_id: string
+  } | null,
 ): ItemZapi[] {
   const itens: ItemZapi[] = []
   const tipo = typeof corpo?.type === 'string' ? corpo.type : ''
   const occurredAt = isoDeMomment(corpo?.momment)
-  const stale = occurredAt !== null && Date.now() - new Date(occurredAt).getTime() > TOLERANCIA_STALE_MS
+  const stale =
+    occurredAt !== null && Date.now() - new Date(occurredAt).getTime() > TOLERANCIA_STALE_MS
 
   const base = {
     channel_account_id: conta?.id ?? null,
@@ -149,7 +161,9 @@ export function mapearCorpoZapi(
   if (tipo === 'MessageStatusCallback') {
     const ids = Array.isArray(corpo?.ids) ? (corpo.ids as unknown[]) : []
     const primeiroId = typeof ids[0] === 'string' ? ids[0] : ''
-    const statusInterno = statusZapiParaInterno(typeof corpo?.status === 'string' ? corpo.status : undefined)
+    const statusInterno = statusZapiParaInterno(
+      typeof corpo?.status === 'string' ? corpo.status : undefined,
+    )
     itens.push({
       ...base,
       kind: 'status',
@@ -187,7 +201,9 @@ export function mapearCorpoZapi(
       provider_message_id: messageId || null,
       status: temErro ? 'failed' : 'sent',
       error_code: temErro
-        ? (typeof corpo?.errorCode === 'string' ? corpo.errorCode : 'delivery_error')
+        ? typeof corpo?.errorCode === 'string'
+          ? corpo.errorCode
+          : 'delivery_error'
         : null,
       occurred_at: occurredAt,
       stale,
@@ -267,7 +283,12 @@ export async function enviarZapi(
   opcoes: Record<string, unknown> = {},
 ): Promise<EnvioZapiResultado> {
   if (!instanceId || !token || !clientToken || !destinoE164 || !texto) {
-    return { ok: false, provider_message_id: null, http_status: 0, error_code: 'credencial_ausente' }
+    return {
+      ok: false,
+      provider_message_id: null,
+      http_status: 0,
+      error_code: 'credencial_ausente',
+    }
   }
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), 10_000)
@@ -294,7 +315,12 @@ export async function enviarZapi(
       message?: string
     }
     if (resp.ok && typeof data?.messageId === 'string') {
-      return { ok: true, provider_message_id: data.messageId, http_status: resp.status, error_code: null }
+      return {
+        ok: true,
+        provider_message_id: data.messageId,
+        http_status: resp.status,
+        error_code: null,
+      }
     }
     return {
       ok: false,

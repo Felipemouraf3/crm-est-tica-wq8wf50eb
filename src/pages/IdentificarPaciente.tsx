@@ -280,7 +280,7 @@ function IdentificarPaciente() {
             )}
             <button
               onClick={() => buscar(true)}
-              disabled={estado.tipo === 'buscando'}
+              disabled={(estado as { tipo: string }).tipo === 'buscando'}
               className="mt-3 rounded-lg border border-[#F1E5C8] bg-white px-3 py-1.5 text-xs font-semibold text-[#6B6560] hover:bg-[#FFF8ED]"
             >
               Buscar de novo (ignorar cache)

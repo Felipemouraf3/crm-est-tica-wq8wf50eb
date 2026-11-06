@@ -18,7 +18,11 @@ export interface SaidaCopiloto {
 
 export function validarSaidaCopiloto(texto: string): SaidaCopiloto | null {
   const tentar = (bruto: string): any => {
-    try { return JSON.parse(bruto) } catch { return null }
+    try {
+      return JSON.parse(bruto)
+    } catch {
+      return null
+    }
   }
   try {
     const inicio = texto.indexOf('{')
@@ -35,27 +39,52 @@ export function validarSaidaCopiloto(texto: string): SaidaCopiloto | null {
     if (!['nenhum', 'baixo', 'alto'].includes(b.sinal_de_risco)) return null
     if (!Array.isArray(b.evidencias)) return null
     for (const e of b.evidencias) {
-      if (!e || !['mensagem', 'conhecimento'].includes(e.tipo) || typeof e.ref !== 'string') return null
+      if (!e || !['mensagem', 'conhecimento'].includes(e.tipo) || typeof e.ref !== 'string')
+        return null
     }
     const conf = Number(b.confianca)
     if (!Number.isFinite(conf) || conf < 0 || conf > 1) return null
     return {
-      resumo: b.resumo, motivo: b.motivo, resposta_sugerida: b.resposta_sugerida,
-      proxima_acao: b.proxima_acao, dados_faltantes: b.dados_faltantes.map(String),
+      resumo: b.resumo,
+      motivo: b.motivo,
+      resposta_sugerida: b.resposta_sugerida,
+      proxima_acao: b.proxima_acao,
+      dados_faltantes: b.dados_faltantes.map(String),
       sinal_de_risco: b.sinal_de_risco,
       evidencias: b.evidencias.map((e: any) => ({ tipo: e.tipo, ref: String(e.ref) })),
       confianca: conf,
     }
-  } catch { return null }
+  } catch {
+    return null
+  }
 }
 
-export function guardiaoSugestao(s: SaidaCopiloto): { effect: 'allow' | 'blocked'; reason: string | null } {
+export function guardiaoSugestao(s: SaidaCopiloto): {
+  effect: 'allow' | 'blocked'
+  reason: string | null
+} {
   const t = `${s.resposta_sugerida} ${s.resumo} ${s.proxima_acao}`.toLowerCase()
-  if (/r\$\s*\d/.test(t) || /\d+\s*%/.test(t)) return { effect: 'blocked', reason: 'conteudo_preco' }
-  for (const termo of ['desconto', 'promoção', 'promocao', 'garant', 'resultado certo', 'cura', 'diagnóstico', 'diagnostico', 'doença', 'doenca']) {
+  if (/r\$\s*\d/.test(t) || /\d+\s*%/.test(t))
+    return { effect: 'blocked', reason: 'conteudo_preco' }
+  for (const termo of [
+    'desconto',
+    'promoção',
+    'promocao',
+    'garant',
+    'resultado certo',
+    'cura',
+    'diagnóstico',
+    'diagnostico',
+    'doença',
+    'doenca',
+  ]) {
     if (t.includes(termo)) return { effect: 'blocked', reason: 'conteudo_proibido' }
   }
-  if (/(avali|analisa)[a-zç]*\s+(de\s+)?(foto|imagem)/.test(t) || /(foto|imagem)[^.]*(avali|analisa)/.test(t)) return { effect: 'blocked', reason: 'avaliacao_de_foto' }
+  if (
+    /(avali|analisa)[a-zç]*\s+(de\s+)?(foto|imagem)/.test(t) ||
+    /(foto|imagem)[^.]*(avali|analisa)/.test(t)
+  )
+    return { effect: 'blocked', reason: 'avaliacao_de_foto' }
   if (s.sinal_de_risco === 'alto') return { effect: 'blocked', reason: 'sinal_de_risco_alto' }
   return { effect: 'allow', reason: null }
 }
@@ -73,13 +102,20 @@ export async function gerarSugestao(p: {
   itensAprovados: { id: string; question_examples: string[] }[]
   clinica: string
   timeoutMs?: number
-}): Promise<{ ok: true; saida: SaidaCopiloto; usage: { input: number; output: number } } | { ok: false; error_code: string }> {
+}): Promise<
+  | { ok: true; saida: SaidaCopiloto; usage: { input: number; output: number } }
+  | { ok: false; error_code: string }
+> {
   const timeoutMs = p.timeoutMs ?? TIMEOUT_COPILOTO_MS
   const controle = new AbortController()
   const timer = setTimeout(() => controle.abort(), timeoutMs)
-  const historico = p.mensagens.slice(-30)
-    .map((m) => `${m.direction === 'inbound' ? 'Contato' : 'Clínica'}: ${m.body}`).join('\n')
-  const itens = p.itensAprovados.map((i) => `- ${i.id}: ${i.question_examples.join(' | ')}`).join('\n') || '(nenhum)'
+  const historico = p.mensagens
+    .slice(-30)
+    .map((m) => `${m.direction === 'inbound' ? 'Contato' : 'Clínica'}: ${m.body}`)
+    .join('\n')
+  const itens =
+    p.itensAprovados.map((i) => `- ${i.id}: ${i.question_examples.join(' | ')}`).join('\n') ||
+    '(nenhum)'
   const user = [
     `Clínica: ${p.clinica}`,
     `Contato: ${p.nomeContato} (${p.identificacao ?? 'sem identificação'})`,
@@ -105,11 +141,14 @@ export async function gerarSugestao(p: {
       }),
     })
     clearTimeout(timer)
-    if (resp.status === 401 || resp.status === 403) return { ok: false, error_code: 'credencial_invalida' }
+    if (resp.status === 401 || resp.status === 403)
+      return { ok: false, error_code: 'credencial_invalida' }
     if (resp.status === 429) return { ok: false, error_code: 'limite_externo' }
     if (!resp.ok) return { ok: false, error_code: 'ia_erro' }
     const corpo = await resp.json()
-    const bloco = Array.isArray(corpo?.content) ? corpo.content.find((b: any) => b?.type === 'text' && typeof b.text === 'string') : null
+    const bloco = Array.isArray(corpo?.content)
+      ? corpo.content.find((b: any) => b?.type === 'text' && typeof b.text === 'string')
+      : null
     const texto = bloco ? bloco.text : null
     if (!texto) return { ok: false, error_code: 'ia_resposta_malformada' }
     const saida = validarSaidaCopiloto(texto)
@@ -117,12 +156,16 @@ export async function gerarSugestao(p: {
     return {
       ok: true,
       saida,
-      usage: { input: Number(corpo?.usage?.input_tokens ?? 0), output: Number(corpo?.usage?.output_tokens ?? 0) },
+      usage: {
+        input: Number(corpo?.usage?.input_tokens ?? 0),
+        output: Number(corpo?.usage?.output_tokens ?? 0),
+      },
     }
   } catch (e) {
     clearTimeout(timer)
     const msg = String(e?.message ?? e)
-    if (msg.includes('abort') || msg.includes('Abort')) return { ok: false, error_code: 'ia_timeout' }
+    if (msg.includes('abort') || msg.includes('Abort'))
+      return { ok: false, error_code: 'ia_timeout' }
     return { ok: false, error_code: 'ia_indisponivel' }
   }
 }

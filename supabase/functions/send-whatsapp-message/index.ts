@@ -32,12 +32,17 @@ Deno.serve(async (req: Request) => {
     if (segredoEnv && segredoHeader === segredoEnv) autorizado = true
     if (!autorizado) {
       try {
-        const { data: v } = await admin0.rpc('_edge_read_secret', { p_secret_ref: 'vault:cf1c1eb8-5f95-4de0-81b0-3fbd6b6af59c' })
+        const { data: v } = await admin0.rpc('_edge_read_secret', {
+          p_secret_ref: 'vault:cf1c1eb8-5f95-4de0-81b0-3fbd6b6af59c',
+        })
         if (typeof v === 'string' && v !== '' && segredoHeader === v) autorizado = true
       } catch {}
     }
     if (!autorizado) {
-      return json(403, { error: { code: 'sem_permissao', message: 'Acesso interno' }, correlation_id: correlationId })
+      return json(403, {
+        error: { code: 'sem_permissao', message: 'Acesso interno' },
+        correlation_id: correlationId,
+      })
     }
 
     const admin = admin0
@@ -58,18 +63,40 @@ Deno.serve(async (req: Request) => {
       const refId = typeof msg.ref_id === 'string' ? msg.ref_id : null
       const attempt = Number(msg.attempt ?? 1)
       if (!refId) {
-        await moverParaDeadLetter(admin, 'outbound_messages', String(item.msg_id), 'ref_id_ausente', attempt, correlationId, msg.organization_id ?? null, msg.clinic_id ?? null, item.msg_id)
+        await moverParaDeadLetter(
+          admin,
+          'outbound_messages',
+          String(item.msg_id),
+          'ref_id_ausente',
+          attempt,
+          correlationId,
+          msg.organization_id ?? null,
+          msg.clinic_id ?? null,
+          item.msg_id,
+        )
         mortos++
         continue
       }
 
       const { data: pedido } = await admin
         .from('outbound_requests')
-        .select('id, organization_id, clinic_id, channel_account_id, to_phone_e164, kind, test_body, template_name, template_language, status, attempts, created_at, origin')
+        .select(
+          'id, organization_id, clinic_id, channel_account_id, to_phone_e164, kind, test_body, template_name, template_language, status, attempts, created_at, origin',
+        )
         .eq('id', refId)
         .maybeSingle()
       if (!pedido) {
-        await moverParaDeadLetter(admin, 'outbound_messages', refId, 'pedido_inexistente', attempt, correlationId, msg.organization_id ?? null, msg.clinic_id ?? null, item.msg_id)
+        await moverParaDeadLetter(
+          admin,
+          'outbound_messages',
+          refId,
+          'pedido_inexistente',
+          attempt,
+          correlationId,
+          msg.organization_id ?? null,
+          msg.clinic_id ?? null,
+          item.msg_id,
+        )
         mortos++
         continue
       }
@@ -85,13 +112,33 @@ Deno.serve(async (req: Request) => {
         .maybeSingle()
       if (!conta) {
         await falharPedido(admin, pedido.id, 'conta_inexistente')
-        await moverParaDeadLetter(admin, 'outbound_messages', pedido.id, 'conta_inexistente', attempt, correlationId, pedido.organization_id, pedido.clinic_id, item.msg_id)
+        await moverParaDeadLetter(
+          admin,
+          'outbound_messages',
+          pedido.id,
+          'conta_inexistente',
+          attempt,
+          correlationId,
+          pedido.organization_id,
+          pedido.clinic_id,
+          item.msg_id,
+        )
         mortos++
         continue
       }
       if (conta.status !== 'active') {
         await falharPedido(admin, pedido.id, 'conta_desconectada')
-        await moverParaDeadLetter(admin, 'outbound_messages', pedido.id, 'conta_desconectada', attempt, correlationId, pedido.organization_id, pedido.clinic_id, item.msg_id)
+        await moverParaDeadLetter(
+          admin,
+          'outbound_messages',
+          pedido.id,
+          'conta_desconectada',
+          attempt,
+          correlationId,
+          pedido.organization_id,
+          pedido.clinic_id,
+          item.msg_id,
+        )
         mortos++
         continue
       }
@@ -105,7 +152,9 @@ Deno.serve(async (req: Request) => {
           .eq('id', conta.integration_connection_id)
           .maybeSingle()
         if (conn?.secret_ref?.startsWith('vault:')) {
-          const { data: s } = await admin.rpc('_edge_read_secret', { p_secret_ref: conn.secret_ref })
+          const { data: s } = await admin.rpc('_edge_read_secret', {
+            p_secret_ref: conn.secret_ref,
+          })
           token = typeof s === 'string' && s.length > 0 ? s : null
         }
         if (conta.provider === 'z_api') {
@@ -117,38 +166,83 @@ Deno.serve(async (req: Request) => {
             .eq('connection_key', `${conta.external_account_id}:client_token`)
             .maybeSingle()
           if (conn2?.secret_ref?.startsWith('vault:')) {
-            const { data: s2 } = await admin.rpc('_edge_read_secret', { p_secret_ref: conn2.secret_ref })
+            const { data: s2 } = await admin.rpc('_edge_read_secret', {
+              p_secret_ref: conn2.secret_ref,
+            })
             clientToken = typeof s2 === 'string' && s2.length > 0 ? s2 : null
           }
         }
       }
       if (!token) {
         await falharPedido(admin, pedido.id, 'credencial_ausente')
-        await moverParaDeadLetter(admin, 'outbound_messages', pedido.id, 'credencial_ausente', attempt, correlationId, pedido.organization_id, pedido.clinic_id, item.msg_id)
+        await moverParaDeadLetter(
+          admin,
+          'outbound_messages',
+          pedido.id,
+          'credencial_ausente',
+          attempt,
+          correlationId,
+          pedido.organization_id,
+          pedido.clinic_id,
+          item.msg_id,
+        )
         mortos++
         continue
       }
 
-      await admin.from('outbound_requests').update({ status: 'sending', attempts: pedido.attempts + 1, updated_at: new Date().toISOString() }).eq('id', pedido.id)
+      await admin
+        .from('outbound_requests')
+        .update({
+          status: 'sending',
+          attempts: pedido.attempts + 1,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', pedido.id)
 
       let resultado: EnvioResultado
       if (conta.provider === 'z_api') {
-        const texto = pedido.kind === 'text' ? (pedido.test_body ?? '') : (pedido.template_name ?? '')
-        resultado = await enviarZapi(conta.external_account_id, token, clientToken ?? '', pedido.to_phone_e164, texto, correlationId)
+        const texto =
+          pedido.kind === 'text' ? (pedido.test_body ?? '') : (pedido.template_name ?? '')
+        resultado = await enviarZapi(
+          conta.external_account_id,
+          token,
+          clientToken ?? '',
+          pedido.to_phone_e164,
+          texto,
+          correlationId,
+        )
       } else {
         const corpo =
           pedido.kind === 'text'
             ? corpoTexto(pedido.to_phone_e164, pedido.test_body ?? '')
-            : corpoModelo(pedido.to_phone_e164, pedido.template_name ?? '', pedido.template_language ?? 'pt_BR')
-        resultado = await enviarMeta(META_GRAPH_DEFAULT_VERSION, conta.external_account_id, token, corpo, correlationId)
+            : corpoModelo(
+                pedido.to_phone_e164,
+                pedido.template_name ?? '',
+                pedido.template_language ?? 'pt_BR',
+              )
+        resultado = await enviarMeta(
+          META_GRAPH_DEFAULT_VERSION,
+          conta.external_account_id,
+          token,
+          corpo,
+          correlationId,
+        )
       }
 
       if (resultado.ok) {
         await admin
           .from('outbound_requests')
-          .update({ status: 'sent', provider_message_id: resultado.provider_message_id, last_error_code: null, updated_at: new Date().toISOString() })
+          .update({
+            status: 'sent',
+            provider_message_id: resultado.provider_message_id,
+            last_error_code: null,
+            updated_at: new Date().toISOString(),
+          })
           .eq('id', pedido.id)
-        await admin.from('channel_accounts').update({ last_outbound_at: new Date().toISOString() }).eq('id', conta.id)
+        await admin
+          .from('channel_accounts')
+          .update({ last_outbound_at: new Date().toISOString() })
+          .eq('id', conta.id)
         await admin
           .from('messages')
           .update({ status: 'sent', provider_message_id: resultado.provider_message_id })
@@ -173,11 +267,16 @@ Deno.serve(async (req: Request) => {
         continue
       }
 
-      const dentroJanela = Date.now() - new Date(pedido.created_at ?? Date.now()).getTime() < JANELA_30MIN_MS
+      const dentroJanela =
+        Date.now() - new Date(pedido.created_at ?? Date.now()).getTime() < JANELA_30MIN_MS
       if (attempt < MAX_TENTATIVAS && dentroJanela) {
         await admin
           .from('outbound_requests')
-          .update({ status: 'queued', last_error_code: resultado.error_code, updated_at: new Date().toISOString() })
+          .update({
+            status: 'queued',
+            last_error_code: resultado.error_code,
+            updated_at: new Date().toISOString(),
+          })
           .eq('id', pedido.id)
         await admin.rpc('fila_enviar', {
           p_fila: 'outbound_messages',
@@ -187,14 +286,30 @@ Deno.serve(async (req: Request) => {
         reenfileirados++
       } else {
         await falharPedido(admin, pedido.id, resultado.error_code ?? 'falha_envio')
-        await moverParaDeadLetter(admin, 'outbound_messages', pedido.id, resultado.error_code ?? 'falha_envio', attempt, correlationId, pedido.organization_id, pedido.clinic_id, item.msg_id)
+        await moverParaDeadLetter(
+          admin,
+          'outbound_messages',
+          pedido.id,
+          resultado.error_code ?? 'falha_envio',
+          attempt,
+          correlationId,
+          pedido.organization_id,
+          pedido.clinic_id,
+          item.msg_id,
+        )
         mortos++
       }
     }
 
-    return json(200, { data: { processados: itens.length, enviados, reenfileirados, mortos }, correlation_id: correlationId })
+    return json(200, {
+      data: { processados: itens.length, enviados, reenfileirados, mortos },
+      correlation_id: correlationId,
+    })
   } catch (e) {
-    return json(500, { error: { code: 'inesperado', message: 'Erro interno' }, correlation_id: correlationId })
+    return json(500, {
+      error: { code: 'inesperado', message: 'Erro interno' },
+      correlation_id: correlationId,
+    })
   }
 })
 
@@ -265,22 +380,30 @@ async function enviarMeta(
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), 10_000)
   try {
-    const resp = await fetch(`https://graph.facebook.com/${graphVersion}/${phoneNumberId}/messages`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-        'x-correlation-id': correlationId,
+    const resp = await fetch(
+      `https://graph.facebook.com/${graphVersion}/${phoneNumberId}/messages`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          'x-correlation-id': correlationId,
+        },
+        body: JSON.stringify(corpo),
+        signal: controller.signal,
       },
-      body: JSON.stringify(corpo),
-      signal: controller.signal,
-    })
+    )
     const data = (await resp.json().catch(() => ({}))) as {
       messages?: { id?: string }[]
       error?: { code?: number | string }
     }
     if (resp.ok) {
-      return { ok: true, provider_message_id: data?.messages?.[0]?.id ?? null, http_status: resp.status, error_code: null }
+      return {
+        ok: true,
+        provider_message_id: data?.messages?.[0]?.id ?? null,
+        http_status: resp.status,
+        error_code: null,
+      }
     }
     return {
       ok: false,
@@ -290,7 +413,12 @@ async function enviarMeta(
     }
   } catch (e: unknown) {
     const nome = (e as { name?: string })?.name ?? ''
-    return { ok: false, provider_message_id: null, http_status: 0, error_code: nome === 'AbortError' ? 'tempo_esgotado' : 'falha_rede' }
+    return {
+      ok: false,
+      provider_message_id: null,
+      http_status: 0,
+      error_code: nome === 'AbortError' ? 'tempo_esgotado' : 'falha_rede',
+    }
   } finally {
     clearTimeout(timer)
   }
@@ -300,7 +428,11 @@ function corpoTexto(to: string, texto: string): Record<string, unknown> {
   return { messaging_product: 'whatsapp', to, type: 'text', text: { body: texto } }
 }
 
-function corpoModelo(to: string, templateName: string, templateLanguage: string): Record<string, unknown> {
+function corpoModelo(
+  to: string,
+  templateName: string,
+  templateLanguage: string,
+): Record<string, unknown> {
   return {
     messaging_product: 'whatsapp',
     to,
@@ -318,7 +450,12 @@ async function enviarZapi(
   correlationId: string,
 ): Promise<EnvioResultado> {
   if (!instanceId || !token || !clientToken || !destinoE164 || !texto) {
-    return { ok: false, provider_message_id: null, http_status: 0, error_code: 'credencial_ausente' }
+    return {
+      ok: false,
+      provider_message_id: null,
+      http_status: 0,
+      error_code: 'credencial_ausente',
+    }
   }
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), 10_000)
@@ -338,7 +475,12 @@ async function enviarZapi(
     )
     const data = (await resp.json().catch(() => ({}))) as { messageId?: string; error?: string }
     if (resp.ok && typeof data?.messageId === 'string') {
-      return { ok: true, provider_message_id: data.messageId, http_status: resp.status, error_code: null }
+      return {
+        ok: true,
+        provider_message_id: data.messageId,
+        http_status: resp.status,
+        error_code: null,
+      }
     }
     return {
       ok: false,
@@ -348,7 +490,12 @@ async function enviarZapi(
     }
   } catch (e: unknown) {
     const nome = (e as { name?: string })?.name ?? ''
-    return { ok: false, provider_message_id: null, http_status: 0, error_code: nome === 'AbortError' ? 'tempo_esgotado' : 'falha_rede' }
+    return {
+      ok: false,
+      provider_message_id: null,
+      http_status: 0,
+      error_code: nome === 'AbortError' ? 'tempo_esgotado' : 'falha_rede',
+    }
   } finally {
     clearTimeout(timer)
   }

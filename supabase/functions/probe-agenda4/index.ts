@@ -8,24 +8,42 @@ const SECRET_REF = 'vault:11b03308-fb19-461a-b999-3e0205de494c'
 async function readSecret() {
   const r = await fetch(`${SUPABASE_URL}/rest/v1/rpc/_edge_read_secret`, {
     method: 'POST',
-    headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json' },
+    headers: {
+      apikey: SERVICE_KEY,
+      Authorization: `Bearer ${SERVICE_KEY}`,
+      'Content-Type': 'application/json',
+    },
     body: JSON.stringify({ p_secret_ref: SECRET_REF }),
   })
   return String(await r.json()).trim()
 }
 async function ceGet(path: string, token: string) {
   const r = await fetch(`${CE_BASE}${path}`, {
-    headers: { Authorization: `Bearer ${token}`, Accept: 'application/json', 'User-Agent': 'PS-CRM/1.0 (+integracao-interna)' },
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: 'application/json',
+      'User-Agent': 'PS-CRM/1.0 (+integracao-interna)',
+    },
   })
   const t = await r.text()
-  try { return { status: r.status, body: JSON.parse(t) } } catch { return { status: r.status, body: { raw: t.slice(0, 300) } } }
+  try {
+    return { status: r.status, body: JSON.parse(t) }
+  } catch {
+    return { status: r.status, body: { raw: t.slice(0, 300) } }
+  }
 }
-const norm = (s: string) => (s ?? '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+const norm = (s: string) =>
+  (s ?? '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
 
 Deno.serve(async () => {
   const token = await readSecret()
   const procs: any[] = []
-  let page = 1, last = 1
+  let page = 1,
+    last = 1
   do {
     const r = await ceGet(`/procedures?per_page=100&page=${page}`, token)
     const b: any = r.body
@@ -35,7 +53,8 @@ Deno.serve(async () => {
   } while (page <= last)
 
   const profs: any[] = []
-  page = 1; last = 1
+  page = 1
+  last = 1
   do {
     const r = await ceGet(`/professionals?per_page=100&page=${page}`, token)
     const b: any = r.body
@@ -57,19 +76,30 @@ Deno.serve(async () => {
     for (const pr of p.professionals) {
       const cands = porNome.get(norm(pr.name)) ?? []
       linhas.push({
-        proc_id: p.id, proc: p.name, duracao: p.duration,
-        prof_id_numerico: pr.id, prof_nome: pr.name,
-        casou: cands.length, uuids: cands.map((c: any) => c.uuid),
+        proc_id: p.id,
+        proc: p.name,
+        duracao: p.duration,
+        prof_id_numerico: pr.id,
+        prof_nome: pr.name,
+        casou: cands.length,
+        uuids: cands.map((c: any) => c.uuid),
       })
     }
   }
 
-  return new Response(JSON.stringify({
-    total_procedimentos: procs.length,
-    total_profissionais: profs.length,
-    procedimentos_com_profissional: comProf.length,
-    vinculos: linhas.length,
-    ambiguos: linhas.filter((l) => l.casou !== 1).length,
-    detalhe: linhas,
-  }, null, 1), { headers: { 'Content-Type': 'application/json' } })
-});
+  return new Response(
+    JSON.stringify(
+      {
+        total_procedimentos: procs.length,
+        total_profissionais: profs.length,
+        procedimentos_com_profissional: comProf.length,
+        vinculos: linhas.length,
+        ambiguos: linhas.filter((l) => l.casou !== 1).length,
+        detalhe: linhas,
+      },
+      null,
+      1,
+    ),
+    { headers: { 'Content-Type': 'application/json' } },
+  )
+})

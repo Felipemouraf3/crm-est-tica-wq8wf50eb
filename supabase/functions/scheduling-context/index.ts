@@ -50,7 +50,10 @@ const memoria = new Map<string, { em: number; horas: string[] }>()
 function ler(chave: string): string[] | null {
   const v = memoria.get(chave)
   if (!v) return null
-  if (Date.now() - v.em > MEM_MS) { memoria.delete(chave); return null }
+  if (Date.now() - v.em > MEM_MS) {
+    memoria.delete(chave)
+    return null
+  }
   return v.horas
 }
 async function get(token: string, rota: string, q: Record<string, string>, c: { n: number }) {
@@ -72,13 +75,23 @@ async function get(token: string, rota: string, q: Record<string, string>, c: { 
     })
     const txt = await r.text()
     let corpo: any = {}
-    try { corpo = txt ? JSON.parse(txt) : {} } catch { corpo = {} }
+    try {
+      corpo = txt ? JSON.parse(txt) : {}
+    } catch {
+      corpo = {}
+    }
     if (!r.ok) throw new Error(`API ${r.status} ${corpo?.error?.code ?? ''}`.trim())
     return corpo
-  } finally { clearTimeout(t) }
+  } finally {
+    clearTimeout(t)
+  }
 }
 const norm = (s: string) =>
-  (s ?? '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  (s ?? '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
@@ -92,25 +105,30 @@ Deno.serve(async (req) => {
       if (!clinic) throw new Error('informe ?clinic=')
       const c = { n: 0 }
       const procs: any[] = []
-      let pg = 1, last = 1
+      let pg = 1,
+        last = 1
       do {
         const b: any = await get(token, '/procedures', { per_page: '100', page: String(pg) }, c)
         procs.push(...(Array.isArray(b?.data) ? b.data : []))
-        last = Number(b?.meta?.last_page ?? 1); pg++
+        last = Number(b?.meta?.last_page ?? 1)
+        pg++
       } while (pg <= last)
       const profs: any[] = []
-      pg = 1; last = 1
+      pg = 1
+      last = 1
       do {
         const b: any = await get(token, '/professionals', { per_page: '100', page: String(pg) }, c)
         profs.push(...(Array.isArray(b?.data) ? b.data : []))
-        last = Number(b?.meta?.last_page ?? 1); pg++
+        last = Number(b?.meta?.last_page ?? 1)
+        pg++
       } while (pg <= last)
       const porNome = new Map<string, any[]>()
       for (const p of profs) {
         const k = norm(p.name)
         porNome.set(k, [...(porNome.get(k) ?? []), p])
       }
-      const linhas: any[] = [], amb: any[] = []
+      const linhas: any[] = [],
+        amb: any[] = []
       for (const proc of procs) {
         for (const pr of proc.professionals ?? []) {
           const cand = porNome.get(norm(pr.name)) ?? []
@@ -134,9 +152,13 @@ Deno.serve(async (req) => {
       })
       if (!s.ok) throw new Error('gravacao: ' + s.status + ' ' + (await s.text()))
       return json({
-        ok: true, procedimentos: procs.length, profissionais: profs.length,
+        ok: true,
+        procedimentos: procs.length,
+        profissionais: profs.length,
         com_profissional: procs.filter((p) => (p.professionals ?? []).length > 0).length,
-        vinculos: linhas.length, ambiguos: amb, chamadas: c.n,
+        vinculos: linhas.length,
+        ambiguos: amb,
+        chamadas: c.n,
       })
     }
 
@@ -153,16 +175,22 @@ Deno.serve(async (req) => {
     const ctx = await ctxR.json()
     if (!ctx.tem_vinculo) {
       return json({
-        ok: true, tem_vinculo: false,
-        aviso: 'Este procedimento ainda não tem profissional relacionado. Escolha um dos profissionais da clínica ou cadastre a relação.',
-        procedimento: ctx.procedure, professionals: [],
-        alternatives: ctx.professionals_da_clinica, dias: [], chamadas: 0,
+        ok: true,
+        tem_vinculo: false,
+        aviso:
+          'Este procedimento ainda não tem profissional relacionado. Escolha um dos profissionais da clínica ou cadastre a relação.',
+        procedimento: ctx.procedure,
+        professionals: [],
+        alternatives: ctx.professionals_da_clinica,
+        dias: [],
+        chamadas: 0,
       })
     }
     const c = { n: 0 }
     const alvos: string[] = []
     for (let i = 0; i < dias; i++) {
-      const d = new Date(); d.setDate(d.getDate() + i)
+      const d = new Date()
+      d.setDate(d.getDate() + i)
       alvos.push(d.toISOString().slice(0, 10))
     }
     const total = (ctx.professionals as any[]).length * alvos.length
@@ -176,17 +204,27 @@ Deno.serve(async (req) => {
         if (!horas) {
           if (c.n >= MAX) {
             noDia.push({
-              professional: p, horas: [], erro: 'limite_de_chamadas',
+              professional: p,
+              horas: [],
+              erro: 'limite_de_chamadas',
               mensagem: 'Este pedido atingiu o limite de 20 consultas. Peça o próximo dia.',
             })
             continue
           }
-          const b: any = await get(token, '/available-hours', {
-            professional_uuid: p.expert_uuid, date: dia,
-            procedure_id: String(proc),
-            interval: String(ctx.procedure?.duration_efetiva_min ?? 30),
-          }, c)
-          horas = (Array.isArray(b?.data) ? b.data : []).filter((h: unknown) => typeof h === 'string')
+          const b: any = await get(
+            token,
+            '/available-hours',
+            {
+              professional_uuid: p.expert_uuid,
+              date: dia,
+              procedure_id: String(proc),
+              interval: String(ctx.procedure?.duration_efetiva_min ?? 30),
+            },
+            c,
+          )
+          horas = (Array.isArray(b?.data) ? b.data : []).filter(
+            (h: unknown) => typeof h === 'string',
+          )
           memoria.set(k, { em: Date.now(), horas: horas as string[] })
         }
         noDia.push({ professional: p, horas, de_memoria: cache })
@@ -194,11 +232,15 @@ Deno.serve(async (req) => {
       saida.push({ dia, profissionais: noDia })
     }
     return json({
-      ok: true, tem_vinculo: true, procedimento: ctx.procedure,
+      ok: true,
+      tem_vinculo: true,
+      procedimento: ctx.procedure,
       default_interval_min: ctx.default_interval_min,
       default_is_draft: ctx.default_is_draft,
       bloqueado_por_limite: total > MAX,
-      dias: saida, chamadas: c.n, limite_chamadas: MAX,
+      dias: saida,
+      chamadas: c.n,
+      limite_chamadas: MAX,
     })
   } catch (e) {
     const msg = String((e as Error)?.message ?? e)

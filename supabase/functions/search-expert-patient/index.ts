@@ -40,12 +40,22 @@ Deno.serve(async (req: Request) => {
     const phoneRaw = body?.phone
     const forceRefresh = body?.force_refresh === true || body?.forcar_api === true
     if (!clinicId || !phoneRaw) {
-      return resp(400, { erro: 'entrada', mensagem: 'clinic_id e phone são obrigatórios', correlation_id: correlationId })
+      return resp(400, {
+        erro: 'entrada',
+        mensagem: 'clinic_id e phone são obrigatórios',
+        correlation_id: correlationId,
+      })
     }
 
-    const { data: phoneE164, error: normErr } = await userClient.rpc('normalize_e164', { p_raw: phoneRaw })
+    const { data: phoneE164, error: normErr } = await userClient.rpc('normalize_e164', {
+      p_raw: phoneRaw,
+    })
     if (normErr || !phoneE164) {
-      return resp(400, { erro: 'entrada', mensagem: 'Telefone inválido para E.164', correlation_id: correlationId })
+      return resp(400, {
+        erro: 'entrada',
+        mensagem: 'Telefone inválido para E.164',
+        correlation_id: correlationId,
+      })
     }
 
     const { data: clinicRow, error: clinicErr } = await userClient
@@ -54,11 +64,21 @@ Deno.serve(async (req: Request) => {
       .eq('id', clinicId)
       .maybeSingle()
     if (clinicErr || !clinicRow || clinicRow.status !== 'active') {
-      return resp(403, { erro: 'permissao', mensagem: 'Clínica não encontrada ou inativa', correlation_id: correlationId })
+      return resp(403, {
+        erro: 'permissao',
+        mensagem: 'Clínica não encontrada ou inativa',
+        correlation_id: correlationId,
+      })
     }
-    const { data: membro, error: membroErr } = await userClient.rpc('is_org_member', { p_org: clinicRow.organization_id })
+    const { data: membro, error: membroErr } = await userClient.rpc('is_org_member', {
+      p_org: clinicRow.organization_id,
+    })
     if (membroErr || membro !== true) {
-      return resp(403, { erro: 'permissao', mensagem: 'Sem permissão nesta clínica', correlation_id: correlationId })
+      return resp(403, {
+        erro: 'permissao',
+        mensagem: 'Sem permissão nesta clínica',
+        correlation_id: correlationId,
+      })
     }
 
     if (!forceRefresh) {
@@ -96,11 +116,17 @@ Deno.serve(async (req: Request) => {
     let token: string | null = null
     if (conn?.secret_ref?.startsWith('vault:')) {
       // v4: ler via RPC SECURITY DEFINER (com sanitização de whitespace)
-      const { data: segredo } = await adminClient.rpc('_edge_read_secret', { p_secret_ref: conn.secret_ref })
+      const { data: segredo } = await adminClient.rpc('_edge_read_secret', {
+        p_secret_ref: conn.secret_ref,
+      })
       token = typeof segredo === 'string' && segredo.length > 0 ? segredo : null
     }
     if (!token) {
-      return resp(503, { erro: 'credencial', mensagem: 'Token da API não configurado (salve via /admin)', correlation_id: correlationId })
+      return resp(503, {
+        erro: 'credencial',
+        mensagem: 'Token da API não configurado (salve via /admin)',
+        correlation_id: correlationId,
+      })
     }
 
     let busca

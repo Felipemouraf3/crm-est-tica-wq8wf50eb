@@ -31,13 +31,19 @@ Deno.serve(async (req: Request) => {
   try {
     if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
     if (req.method !== 'POST') {
-      return json(405, { error: { code: 'metodo_invalido', message: 'Método não suportado' }, correlation_id: correlationId })
+      return json(405, {
+        error: { code: 'metodo_invalido', message: 'Método não suportado' },
+        correlation_id: correlationId,
+      })
     }
 
     const caParam = url.searchParams.get('ca') ?? ''
     const kParam = url.searchParams.get('k') ?? ''
     if (!caParam || !kParam) {
-      return json(401, { error: { code: 'caminho_invalido', message: 'Caminho incompleto' }, correlation_id: correlationId })
+      return json(401, {
+        error: { code: 'caminho_invalido', message: 'Caminho incompleto' },
+        correlation_id: correlationId,
+      })
     }
 
     const { data: conta } = await admin
@@ -48,18 +54,32 @@ Deno.serve(async (req: Request) => {
       .in('status', ['active', 'paused', 'disconnected'])
       .maybeSingle()
     if (!conta?.webhook_secret_ref?.startsWith('vault:')) {
-      return json(401, { error: { code: 'caminho_invalido', message: 'Caminho inválido' }, correlation_id: correlationId })
-    }
-
-    const { data: segredo } = await admin.rpc('_edge_read_secret', { p_secret_ref: conta.webhook_secret_ref })
-    if (!segredo || !segredoValido(segredo, kParam)) {
-      await admin.from('webhook_receipts').insert({
-        provider: 'z_api', channel_account_id: conta.id, organization_id: conta.organization_id,
-        clinic_id: conta.clinic_id, external_event_id: `sig_${correlationId}`, event_kind: 'other',
-        signature_valid: false, payload_hash: await sha256Hex(`${caParam}`), status: 'rejected_signature',
+      return json(401, {
+        error: { code: 'caminho_invalido', message: 'Caminho inválido' },
         correlation_id: correlationId,
       })
-      return json(401, { error: { code: 'segredo_invalido', message: 'Segredo inválido' }, correlation_id: correlationId })
+    }
+
+    const { data: segredo } = await admin.rpc('_edge_read_secret', {
+      p_secret_ref: conta.webhook_secret_ref,
+    })
+    if (!segredo || !segredoValido(segredo, kParam)) {
+      await admin.from('webhook_receipts').insert({
+        provider: 'z_api',
+        channel_account_id: conta.id,
+        organization_id: conta.organization_id,
+        clinic_id: conta.clinic_id,
+        external_event_id: `sig_${correlationId}`,
+        event_kind: 'other',
+        signature_valid: false,
+        payload_hash: await sha256Hex(`${caParam}`),
+        status: 'rejected_signature',
+        correlation_id: correlationId,
+      })
+      return json(401, {
+        error: { code: 'segredo_invalido', message: 'Segredo inválido' },
+        correlation_id: correlationId,
+      })
     }
 
     const { data: janela } = await admin
@@ -71,12 +91,21 @@ Deno.serve(async (req: Request) => {
     const recebidos = janela?.length ?? 0
     if (recebidos >= LIMITE_POR_MIN) {
       await admin.from('webhook_receipts').insert({
-        provider: 'z_api', channel_account_id: conta.id, organization_id: conta.organization_id,
-        clinic_id: conta.clinic_id, external_event_id: `rate_${correlationId}`, event_kind: 'other',
-        signature_valid: true, payload_hash: await sha256Hex(`${caParam}:rate`), status: 'rejected_rate',
+        provider: 'z_api',
+        channel_account_id: conta.id,
+        organization_id: conta.organization_id,
+        clinic_id: conta.clinic_id,
+        external_event_id: `rate_${correlationId}`,
+        event_kind: 'other',
+        signature_valid: true,
+        payload_hash: await sha256Hex(`${caParam}:rate`),
+        status: 'rejected_rate',
         correlation_id: correlationId,
       })
-      return json(429, { error: { code: 'rejected_rate', message: 'Limite de requisições por minuto' }, correlation_id: correlationId })
+      return json(429, {
+        error: { code: 'rejected_rate', message: 'Limite de requisições por minuto' },
+        correlation_id: correlationId,
+      })
     }
 
     const corpoBruto = await req.text()
@@ -84,17 +113,29 @@ Deno.serve(async (req: Request) => {
     try {
       corpo = JSON.parse(corpoBruto)
     } catch {
-      return json(400, { error: { code: 'entrada_invalida', message: 'Corpo não é JSON' }, correlation_id: correlationId })
+      return json(400, {
+        error: { code: 'entrada_invalida', message: 'Corpo não é JSON' },
+        correlation_id: correlationId,
+      })
     }
     const instanceIdCorpo = typeof corpo?.instanceId === 'string' ? corpo.instanceId : ''
     if (!instanceIdCorpo || instanceIdCorpo !== conta.external_account_id) {
       await admin.from('webhook_receipts').insert({
-        provider: 'z_api', channel_account_id: conta.id, organization_id: conta.organization_id,
-        clinic_id: conta.clinic_id, external_event_id: `inst_${correlationId}`, event_kind: 'other',
-        signature_valid: true, payload_hash: await sha256Hex(corpoBruto.slice(0, 512)), status: 'rejected_signature',
+        provider: 'z_api',
+        channel_account_id: conta.id,
+        organization_id: conta.organization_id,
+        clinic_id: conta.clinic_id,
+        external_event_id: `inst_${correlationId}`,
+        event_kind: 'other',
+        signature_valid: true,
+        payload_hash: await sha256Hex(corpoBruto.slice(0, 512)),
+        status: 'rejected_signature',
         correlation_id: correlationId,
       })
-      return json(401, { error: { code: 'instance_invalido', message: 'Instância não corresponde à conta' }, correlation_id: correlationId })
+      return json(401, {
+        error: { code: 'instance_invalido', message: 'Instância não corresponde à conta' },
+        correlation_id: correlationId,
+      })
     }
 
     const itens = mapearCorpoZapi(corpo, {
@@ -116,7 +157,10 @@ Deno.serve(async (req: Request) => {
         .eq('provider', 'z_api')
         .eq('external_event_id', item.external_event_id)
         .maybeSingle()
-      if (dup) { duplicados++; continue }
+      if (dup) {
+        duplicados++
+        continue
+      }
 
       const { error: errRecibo } = await admin.from('webhook_receipts').insert({
         provider: 'z_api',
@@ -127,21 +171,42 @@ Deno.serve(async (req: Request) => {
         event_kind: item.kind,
         signature_valid: true,
         payload_hash: await sha256Hex(corpoBruto),
-        payload_ref: await gravarPayload(admin, item.organization_id, item.external_event_id, corpoBruto),
+        payload_ref: await gravarPayload(
+          admin,
+          item.organization_id,
+          item.external_event_id,
+          corpoBruto,
+        ),
         status: statusRecibo,
         correlation_id: correlationId,
       })
-      if (errRecibo) { duplicados++; continue }
+      if (errRecibo) {
+        duplicados++
+        continue
+      }
 
-      if (statusRecibo !== 'accepted') { rejeitados++; continue }
+      if (statusRecibo !== 'accepted') {
+        rejeitados++
+        continue
+      }
       aceitos++
 
       if (item.desconectar) {
-        await admin.from('channel_accounts').update({ status: 'disconnected', last_status_at: new Date().toISOString(), last_error_code: 'desconectada' }).eq('id', conta.id)
+        await admin
+          .from('channel_accounts')
+          .update({
+            status: 'disconnected',
+            last_status_at: new Date().toISOString(),
+            last_error_code: 'desconectada',
+          })
+          .eq('id', conta.id)
         continue
       }
       if (item.kind === 'connection') {
-        await admin.from('channel_accounts').update({ last_status_at: new Date().toISOString() }).eq('id', conta.id)
+        await admin
+          .from('channel_accounts')
+          .update({ last_status_at: new Date().toISOString() })
+          .eq('id', conta.id)
         continue
       }
 
@@ -159,12 +224,18 @@ Deno.serve(async (req: Request) => {
           },
           { onConflict: 'provider,provider_message_id,status' },
         )
-        await admin.from('channel_accounts').update({ last_status_at: new Date().toISOString() }).eq('id', conta.id)
+        await admin
+          .from('channel_accounts')
+          .update({ last_status_at: new Date().toISOString() })
+          .eq('id', conta.id)
         continue
       }
 
       if (item.kind === 'message') {
-        await admin.from('channel_accounts').update({ last_inbound_at: new Date().toISOString() }).eq('id', conta.id)
+        await admin
+          .from('channel_accounts')
+          .update({ last_inbound_at: new Date().toISOString() })
+          .eq('id', conta.id)
         await admin.schema('pgmq').rpc('send', {
           queue_name: 'inbound_events',
           msg: {
@@ -185,7 +256,10 @@ Deno.serve(async (req: Request) => {
 
     return json(200, { data: { aceitos, duplicados, rejeitados }, correlation_id: correlationId })
   } catch (e) {
-    return json(500, { error: { code: 'inesperado', message: 'Erro interno' }, correlation_id: correlationId })
+    return json(500, {
+      error: { code: 'inesperado', message: 'Erro interno' },
+      correlation_id: correlationId,
+    })
   }
 })
 
@@ -208,7 +282,8 @@ async function gravarPayload(
     const hoje = new Date().toISOString().slice(0, 10)
     const caminho = `webhook-payloads/${organizationId}/${hoje}/${externalEventId}.json`
     const { error } = await admin.storage.from('webhook-payloads').upload(caminho, corpoBruto, {
-      contentType: 'application/json', upsert: true,
+      contentType: 'application/json',
+      upsert: true,
     })
     if (error) return null
     return caminho

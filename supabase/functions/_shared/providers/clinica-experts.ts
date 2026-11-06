@@ -14,7 +14,12 @@ export class ErroOperacional extends Error {
   code: string
   correlationId: string
   detalhe: Record<string, unknown>
-  constructor(code: string, mensagem: string, correlationId: string, detalhe: Record<string, unknown> = {}) {
+  constructor(
+    code: string,
+    mensagem: string,
+    correlationId: string,
+    detalhe: Record<string, unknown> = {},
+  ) {
     super(mensagem)
     this.name = 'ErroOperacional'
     this.code = code
@@ -119,7 +124,11 @@ export async function expertGet(
   opcoes: Record<string, unknown> = {},
 ): Promise<ExpertGetResult> {
   if (!baseUrl || !token) {
-    throw new ErroOperacional('credencial_invalida', 'Conexão não configurada (base ou token ausente).', opcoes.correlationId ?? '-')
+    throw new ErroOperacional(
+      'credencial_invalida',
+      'Conexão não configurada (base ou token ausente).',
+      opcoes.correlationId ?? '-',
+    )
   }
   const connectionId = (opcoes.connectionId as string) ?? 'principal'
   const correlationId = (opcoes.correlationId as string) ?? crypto.randomUUID()
@@ -171,7 +180,12 @@ export async function expertGet(
           data: corpo.data ?? corpo,
           meta: corpo.meta ?? null,
           headers: resp.headers,
-          telemetria: { status: 'ok', duracao_ms: Date.now() - t0, tentativas: tentativa, correlation_id: correlationId },
+          telemetria: {
+            status: 'ok',
+            duracao_ms: Date.now() - t0,
+            tentativas: tentativa,
+            correlation_id: correlationId,
+          },
         }
       }
 
@@ -189,13 +203,21 @@ export async function expertGet(
       const nome = (e as { name?: string })?.name ?? ''
       if (nome === 'AbortError') {
         if (tentativa >= maxTentativas) {
-          throw new ErroOperacional('tempo_esgotado', `Tempo esgotado após ${timeoutMs} ms.`, correlationId)
+          throw new ErroOperacional(
+            'tempo_esgotado',
+            `Tempo esgotado após ${timeoutMs} ms.`,
+            correlationId,
+          )
         }
         await new Promise((r) => setTimeout(r, BACKOFF_MS * 2 ** (tentativa - 1)))
         continue
       }
       if (tentativa >= maxTentativas) {
-        throw new ErroOperacional('falha_transitoria', 'Falha de rede ao contatar a API.', correlationId)
+        throw new ErroOperacional(
+          'falha_transitoria',
+          'Falha de rede ao contatar a API.',
+          correlationId,
+        )
       }
       await new Promise((r) => setTimeout(r, BACKOFF_MS * 2 ** (tentativa - 1)))
     }
@@ -234,7 +256,8 @@ export type ExpertPatientMin = {
 }
 
 export function lerPacienteMinimo(bruto: Record<string, unknown>): ExpertPatientMin | null {
-  const uuid = typeof bruto?.id === 'string' ? bruto.id : typeof bruto?.uuid === 'string' ? bruto.uuid : null
+  const uuid =
+    typeof bruto?.id === 'string' ? bruto.id : typeof bruto?.uuid === 'string' ? bruto.uuid : null
   if (!uuid) return null
   return {
     expert_patient_uuid: uuid,

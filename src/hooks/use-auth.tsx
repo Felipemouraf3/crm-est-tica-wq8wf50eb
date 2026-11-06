@@ -64,8 +64,8 @@ export const getFriendlyAuthErrorMessage = (error: AuthError | Error | null | un
   if (lower.includes('rate limit') || lower.includes('over_email_send_rate_limit')) {
     return 'Muitas tentativas em pouco tempo. Aguarde alguns instantes e tente novamente.'
   }
-  if (lower.includes('email not confirmed')) {
-    return 'E-mail ainda não confirmado. Verifique sua caixa de entrada.'
+  if (lower.includes('email not confirmed') || lower.includes('not confirmed')) {
+    return 'Confirme seu e-mail antes de entrar. Verifique sua caixa de entrada.'
   }
   return 'Não foi possível completar a ação. Tente novamente.'
 }

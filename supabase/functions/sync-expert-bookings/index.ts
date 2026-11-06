@@ -90,9 +90,7 @@ function toRow(b: any, mapa: Record<string, string>) {
 
   // procedimentos do agendamento (P3-S06: identificador, nunca o nome)
   const procs: any[] = Array.isArray(b.procedures) ? b.procedures : []
-  const procIds = procs
-    .map((p) => Number(p?.id))
-    .filter((n) => Number.isFinite(n))
+  const procIds = procs.map((p) => Number(p?.id)).filter((n) => Number.isFinite(n))
   const procNomes = procs.map((p) => String(p?.name ?? '')).filter((s) => s.length > 0)
 
   return {
@@ -165,11 +163,14 @@ Deno.serve(async (req) => {
         for (let i = 0; i < rows.length; i += 200) {
           const lote = rows.slice(i, i + 200)
           if (!lote.length) continue
-          const up = await sb('/rest/v1/appointments_mirror?on_conflict=organization_id,expert_uuid', {
-            method: 'POST',
-            headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
-            body: JSON.stringify(lote),
-          })
+          const up = await sb(
+            '/rest/v1/appointments_mirror?on_conflict=organization_id,expert_uuid',
+            {
+              method: 'POST',
+              headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
+              body: JSON.stringify(lote),
+            },
+          )
           if (!up.ok) throw new Error(`upsert: ${up.status} ${(await up.text()).slice(0, 300)}`)
           gravados += lote.length
         }
@@ -177,26 +178,37 @@ Deno.serve(async (req) => {
       } while (page <= last)
       janelas.push(`${a}-${String(m).padStart(2, '0')}: api_of=${of}`)
       m++
-      if (m > 12) { m = 1; a++ }
+      if (m > 12) {
+        m = 1
+        a++
+      }
     }
 
     await sb('/rest/v1/sync_cursors?resource=eq.bookings', {
       method: 'PATCH',
       headers: { Prefer: 'return=minimal' },
       body: JSON.stringify({
-        status: 'ok', last_success_at: new Date().toISOString(),
-        last_attempt_at: new Date().toISOString(), last_error: null,
+        status: 'ok',
+        last_success_at: new Date().toISOString(),
+        last_attempt_at: new Date().toISOString(),
+        last_error: null,
       }),
     })
 
-    return json({ ok: true, gravados, sem_clinica: semClinica,
-                  com_procedimento: comProcedimento, janelas })
+    return json({
+      ok: true,
+      gravados,
+      sem_clinica: semClinica,
+      com_procedimento: comProcedimento,
+      janelas,
+    })
   } catch (e) {
     await sb('/rest/v1/sync_cursors?resource=eq.bookings', {
       method: 'PATCH',
       headers: { Prefer: 'return=minimal' },
       body: JSON.stringify({
-        status: 'falha', last_attempt_at: new Date().toISOString(),
+        status: 'falha',
+        last_attempt_at: new Date().toISOString(),
         last_error: String(e).slice(0, 300),
       }),
     })

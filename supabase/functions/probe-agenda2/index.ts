@@ -8,18 +8,30 @@ const SECRET_REF = 'vault:11b03308-fb19-461a-b999-3e0205de494c'
 async function readSecret() {
   const r = await fetch(`${SUPABASE_URL}/rest/v1/rpc/_edge_read_secret`, {
     method: 'POST',
-    headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json' },
+    headers: {
+      apikey: SERVICE_KEY,
+      Authorization: `Bearer ${SERVICE_KEY}`,
+      'Content-Type': 'application/json',
+    },
     body: JSON.stringify({ p_secret_ref: SECRET_REF }),
   })
   return String(await r.json()).trim()
 }
 async function ceGet(path: string, token: string) {
   const r = await fetch(`${CE_BASE}${path}`, {
-    headers: { Authorization: `Bearer ${token}`, Accept: 'application/json', 'User-Agent': 'PS-CRM/1.0 (+integracao-interna)' },
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: 'application/json',
+      'User-Agent': 'PS-CRM/1.0 (+integracao-interna)',
+    },
   })
   const t = await r.text()
   let j: any = {}
-  try { j = JSON.parse(t) } catch { j = { raw: t.slice(0, 400) } }
+  try {
+    j = JSON.parse(t)
+  } catch {
+    j = { raw: t.slice(0, 400) }
+  }
   return { status: r.status, body: j }
 }
 Deno.serve(async (req) => {
@@ -36,8 +48,15 @@ Deno.serve(async (req) => {
       // available-hours com id numérico no lugar do uuid
       out.ahComId = await ceGet('/available-hours?professional_uuid=10438&date=2026-11-10', token)
       // available-hours com procedure e interval
-      out.ahComProc = await ceGet('/available-hours?professional_uuid=6f9758fd-18f7-4808-b34a-5dfe9b0df9db&date=2026-11-10&procedure_id=151746&interval=30', token)
+      out.ahComProc = await ceGet(
+        '/available-hours?professional_uuid=6f9758fd-18f7-4808-b34a-5dfe9b0df9db&date=2026-11-10&procedure_id=151746&interval=30',
+        token,
+      )
     }
-  } catch (e) { out.erro = String(e) }
-  return new Response(JSON.stringify(out, null, 1), { headers: { 'Content-Type': 'application/json' } })
-});
+  } catch (e) {
+    out.erro = String(e)
+  }
+  return new Response(JSON.stringify(out, null, 1), {
+    headers: { 'Content-Type': 'application/json' },
+  })
+})

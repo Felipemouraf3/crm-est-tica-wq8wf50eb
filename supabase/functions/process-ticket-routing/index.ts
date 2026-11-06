@@ -13,22 +13,34 @@ Deno.serve(async (req: Request) => {
   const correlationId = crypto.randomUUID()
   try {
     const segredoHeader = req.headers.get('x-internal-job') ?? ''
-    const admin0 = createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '')
+    const admin0 = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+    )
     let autorizado = false
     const segredoEnv = Deno.env.get('INTERNAL_JOB_SECRET') ?? ''
     if (segredoEnv && segredoHeader === segredoEnv) autorizado = true
     if (!autorizado) {
       try {
-        const { data: v } = await admin0.rpc('_edge_read_secret', { p_secret_ref: 'vault:cf1c1eb8-5f95-4de0-81b0-3fbd6b6af59c' })
+        const { data: v } = await admin0.rpc('_edge_read_secret', {
+          p_secret_ref: 'vault:cf1c1eb8-5f95-4de0-81b0-3fbd6b6af59c',
+        })
         if (typeof v === 'string' && v !== '' && segredoHeader === v) autorizado = true
       } catch {}
     }
     if (!autorizado) {
-      return json(403, { error: { code: 'sem_permissao', message: 'Acesso interno' }, correlation_id: correlationId })
+      return json(403, {
+        error: { code: 'sem_permissao', message: 'Acesso interno' },
+        correlation_id: correlationId,
+      })
     }
     const admin = admin0
     const agora = new Date()
-    let ofertas = 0, reofertas = 0, escalados = 0, slaBreaches = 0, avisosFora = 0
+    let ofertas = 0,
+      reofertas = 0,
+      escalados = 0,
+      slaBreaches = 0,
+      avisosFora = 0
 
     // ===== 1) Ofertas vencidas → reoferta / reserva / escalonamento (passo 5) =====
     const { data: vencidas } = await admin
@@ -52,18 +64,29 @@ Deno.serve(async (req: Request) => {
         const { data: eleg } = await admin.rpc('fila_elegiveis', { p_queue: t.queue_id })
         const lista = (eleg ?? []).filter((e: any) => e.user_id !== t.offered_to)
         if (lista.length > 0) {
-          const alvo = lista.reduce((m: any, e: any) => (Number(e.active_load) < Number(m.active_load) ? e : m), lista[0])
+          const alvo = lista.reduce(
+            (m: any, e: any) => (Number(e.active_load) < Number(m.active_load) ? e : m),
+            lista[0],
+          )
           const timeout = Number(pol?.accept_timeout_seconds ?? 120)
-          await admin.from('tickets').update({
-            offered_to: alvo.user_id,
-            offer_expires_at: new Date(agora.getTime() + timeout * 1000).toISOString(),
-            reoffer_count: reoffer,
-            version: Number(t.version) + 1,
-            updated_at: agora.toISOString(),
-          }).eq('id', t.id).eq('version', t.version)
+          await admin
+            .from('tickets')
+            .update({
+              offered_to: alvo.user_id,
+              offer_expires_at: new Date(agora.getTime() + timeout * 1000).toISOString(),
+              reoffer_count: reoffer,
+              version: Number(t.version) + 1,
+              updated_at: agora.toISOString(),
+            })
+            .eq('id', t.id)
+            .eq('version', t.version)
           await admin.from('ticket_events').insert({
-            organization_id: t.organization_id, clinic_id: t.clinic_id, ticket_id: t.id,
-            event_type: 'offered', to_user_id: alvo.user_id, reason_code: 'reoferta',
+            organization_id: t.organization_id,
+            clinic_id: t.clinic_id,
+            ticket_id: t.id,
+            event_type: 'offered',
+            to_user_id: alvo.user_id,
+            reason_code: 'reoferta',
             metadata_sanitized: { reoffer },
           })
           reofertas++
@@ -71,24 +94,45 @@ Deno.serve(async (req: Request) => {
         }
       }
       if (pol?.backup_queue_id) {
-        await admin.from('tickets').update({
-          queue_id: pol.backup_queue_id, offered_to: null, offer_expires_at: null,
-          status: 'queued', version: Number(t.version) + 1, updated_at: agora.toISOString(),
-        }).eq('id', t.id).eq('version', t.version)
+        await admin
+          .from('tickets')
+          .update({
+            queue_id: pol.backup_queue_id,
+            offered_to: null,
+            offer_expires_at: null,
+            status: 'queued',
+            version: Number(t.version) + 1,
+            updated_at: agora.toISOString(),
+          })
+          .eq('id', t.id)
+          .eq('version', t.version)
         await admin.from('ticket_events').insert({
-          organization_id: t.organization_id, clinic_id: t.clinic_id, ticket_id: t.id,
-          event_type: 'transferred', reason_code: 'fila_reserva',
+          organization_id: t.organization_id,
+          clinic_id: t.clinic_id,
+          ticket_id: t.id,
+          event_type: 'transferred',
+          reason_code: 'fila_reserva',
           metadata_sanitized: { backup_queue_id: pol.backup_queue_id },
         })
         continue
       }
-      await admin.from('tickets').update({
-        status: 'escalated', offered_to: null, offer_expires_at: null,
-        version: Number(t.version) + 1, updated_at: agora.toISOString(),
-      }).eq('id', t.id).eq('version', t.version)
+      await admin
+        .from('tickets')
+        .update({
+          status: 'escalated',
+          offered_to: null,
+          offer_expires_at: null,
+          version: Number(t.version) + 1,
+          updated_at: agora.toISOString(),
+        })
+        .eq('id', t.id)
+        .eq('version', t.version)
       await admin.from('ticket_events').insert({
-        organization_id: t.organization_id, clinic_id: t.clinic_id, ticket_id: t.id,
-        event_type: 'escalated', reason_code: 'sem_aceite_cadeia_completa',
+        organization_id: t.organization_id,
+        clinic_id: t.clinic_id,
+        ticket_id: t.id,
+        event_type: 'escalated',
+        reason_code: 'sem_aceite_cadeia_completa',
         metadata_sanitized: { escalation_role: pol?.escalation_role ?? 'manager' },
       })
       escalados++
@@ -113,18 +157,27 @@ Deno.serve(async (req: Request) => {
           .limit(1)
         if (!jaAvisou?.length) {
           await admin.from('ticket_events').insert({
-            organization_id: t.organization_id, clinic_id: t.clinic_id, ticket_id: t.id,
-            event_type: 'after_hours_notice', reason_code: 'fora_do_expediente',
+            organization_id: t.organization_id,
+            clinic_id: t.clinic_id,
+            ticket_id: t.id,
+            event_type: 'after_hours_notice',
+            reason_code: 'fora_do_expediente',
             metadata_sanitized: { observacao: 'aviso de espera aprovado enviado uma única vez' },
           })
           avisosFora++
         }
         const proximo = new Date(agora.getTime() + 24 * 3600 * 1000)
         proximo.setUTCHours(12, 0, 0, 0) // 9h em Recife (UTC-3)
-        await admin.from('tickets').update({
-          status: 'queued', next_action_at: proximo.toISOString(),
-          version: Number(t.version) + 1, updated_at: agora.toISOString(),
-        }).eq('id', t.id).eq('version', t.version)
+        await admin
+          .from('tickets')
+          .update({
+            status: 'queued',
+            next_action_at: proximo.toISOString(),
+            version: Number(t.version) + 1,
+            updated_at: agora.toISOString(),
+          })
+          .eq('id', t.id)
+          .eq('version', t.version)
         continue
       }
       const { data: eleg } = await admin.rpc('fila_elegiveis', { p_queue: t.queue_id })
@@ -139,12 +192,18 @@ Deno.serve(async (req: Request) => {
           .limit(1)
         if (!jaAlertou?.length) {
           await admin.from('ticket_events').insert({
-            organization_id: t.organization_id, clinic_id: t.clinic_id, ticket_id: t.id,
-            event_type: 'escalated', reason_code: 'ninguem_elegivel',
+            organization_id: t.organization_id,
+            clinic_id: t.clinic_id,
+            ticket_id: t.id,
+            event_type: 'escalated',
+            reason_code: 'ninguem_elegivel',
             metadata_sanitized: { alerta: 'gestor deve assumir ou aguardar próximo expediente' },
           })
         }
-        await admin.from('tickets').update({ status: 'queued', updated_at: agora.toISOString() }).eq('id', t.id)
+        await admin
+          .from('tickets')
+          .update({ status: 'queued', updated_at: agora.toISOString() })
+          .eq('id', t.id)
         continue
       }
       const { data: pol } = await admin
@@ -159,29 +218,52 @@ Deno.serve(async (req: Request) => {
       if (estrategia === 'manual') continue // passo 3: manual não oferece
       let alvo: any
       if (estrategia === 'round_robin') {
-        alvo = lista.reduce((m: any, e: any) => (new Date(e.last_received) < new Date(m.last_received) ? e : m), lista[0])
+        alvo = lista.reduce(
+          (m: any, e: any) => (new Date(e.last_received) < new Date(m.last_received) ? e : m),
+          lista[0],
+        )
       } else {
-        alvo = lista.reduce((m: any, e: any) =>
-          Number(e.active_load) < Number(m.active_load) ||
-          (Number(e.active_load) === Number(m.active_load) && new Date(e.last_received) < new Date(m.last_received)) ? e : m, lista[0])
+        alvo = lista.reduce(
+          (m: any, e: any) =>
+            Number(e.active_load) < Number(m.active_load) ||
+            (Number(e.active_load) === Number(m.active_load) &&
+              new Date(e.last_received) < new Date(m.last_received))
+              ? e
+              : m,
+          lista[0],
+        )
       }
       const timeout = Number(pol?.accept_timeout_seconds ?? 120)
-      const { data: upd } = await admin.from('tickets').update({
-        status: 'offered', offered_to: alvo.user_id,
-        offer_expires_at: new Date(agora.getTime() + timeout * 1000).toISOString(),
-        sla_due_at: new Date(agora.getTime() + 10 * 60 * 1000).toISOString(),
-        version: Number(t.version) + 1, updated_at: agora.toISOString(),
-      }).eq('id', t.id).eq('version', t.version).select('id')
+      const { data: upd } = await admin
+        .from('tickets')
+        .update({
+          status: 'offered',
+          offered_to: alvo.user_id,
+          offer_expires_at: new Date(agora.getTime() + timeout * 1000).toISOString(),
+          sla_due_at: new Date(agora.getTime() + 10 * 60 * 1000).toISOString(),
+          version: Number(t.version) + 1,
+          updated_at: agora.toISOString(),
+        })
+        .eq('id', t.id)
+        .eq('version', t.version)
+        .select('id')
       if (upd?.length) {
         await admin.from('ticket_events').insert({
-          organization_id: t.organization_id, clinic_id: t.clinic_id, ticket_id: t.id,
-          event_type: 'offered', to_user_id: alvo.user_id,
+          organization_id: t.organization_id,
+          clinic_id: t.clinic_id,
+          ticket_id: t.id,
+          event_type: 'offered',
+          to_user_id: alvo.user_id,
           metadata_sanitized: { estrategia, timeout_seconds: timeout },
         })
-        await admin.from('ticket_sla_events').upsert({
-          ticket_id: t.id, metric: 'accept',
-          due_at: new Date(agora.getTime() + timeout * 1000).toISOString(),
-        }, { onConflict: 'ticket_id,metric' })
+        await admin.from('ticket_sla_events').upsert(
+          {
+            ticket_id: t.id,
+            metric: 'accept',
+            due_at: new Date(agora.getTime() + timeout * 1000).toISOString(),
+          },
+          { onConflict: 'ticket_id,metric' },
+        )
         ofertas++
       }
     }
@@ -195,16 +277,30 @@ Deno.serve(async (req: Request) => {
       .lt('sla_due_at', agora.toISOString())
       .limit(50)
     for (const t of emServico ?? []) {
-      await admin.from('ticket_sla_events').upsert({
-        ticket_id: t.id, metric: 'first_response',
-        due_at: t.sla_due_at, breached_at: agora.toISOString(),
-      }, { onConflict: 'ticket_id,metric' })
-      await admin.from('tickets').update({
-        status: 'sla_breached', version: Number(t.version) + 1, updated_at: agora.toISOString(),
-      }).eq('id', t.id).eq('version', t.version)
+      await admin.from('ticket_sla_events').upsert(
+        {
+          ticket_id: t.id,
+          metric: 'first_response',
+          due_at: t.sla_due_at,
+          breached_at: agora.toISOString(),
+        },
+        { onConflict: 'ticket_id,metric' },
+      )
+      await admin
+        .from('tickets')
+        .update({
+          status: 'sla_breached',
+          version: Number(t.version) + 1,
+          updated_at: agora.toISOString(),
+        })
+        .eq('id', t.id)
+        .eq('version', t.version)
       await admin.from('ticket_events').insert({
-        organization_id: t.organization_id, clinic_id: t.clinic_id, ticket_id: t.id,
-        event_type: 'sla_breached', reason_code: 'primeira_resposta',
+        organization_id: t.organization_id,
+        clinic_id: t.clinic_id,
+        ticket_id: t.id,
+        event_type: 'sla_breached',
+        reason_code: 'primeira_resposta',
       })
       slaBreaches++
     }
@@ -214,6 +310,9 @@ Deno.serve(async (req: Request) => {
       correlation_id: correlationId,
     })
   } catch (e) {
-    return json(500, { error: { code: 'erro_interno', message: (e as Error).message }, correlation_id: correlationId })
+    return json(500, {
+      error: { code: 'erro_interno', message: (e as Error).message },
+      correlation_id: correlationId,
+    })
   }
 })

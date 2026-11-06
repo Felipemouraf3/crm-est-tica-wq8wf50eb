@@ -18,7 +18,11 @@ const APP_ID = '1063262590063176'
 async function segredo(ref: string): Promise<string> {
   const r = await fetch(`${SUPABASE_URL}/rest/v1/rpc/_edge_read_secret`, {
     method: 'POST',
-    headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json' },
+    headers: {
+      apikey: SERVICE_KEY,
+      Authorization: `Bearer ${SERVICE_KEY}`,
+      'Content-Type': 'application/json',
+    },
     body: JSON.stringify({ p_secret_ref: ref }),
   })
   if (!r.ok) return ''
@@ -29,7 +33,11 @@ async function g(path: string, token: string) {
   const sep = path.includes('?') ? '&' : '?'
   const r = await fetch(`${G}${path}${sep}access_token=${encodeURIComponent(token)}`)
   let body: any
-  try { body = await r.json() } catch { body = { raw: 'sem json' } }
+  try {
+    body = await r.json()
+  } catch {
+    body = { raw: 'sem json' }
+  }
   return { status: r.status, body }
 }
 
@@ -44,12 +52,22 @@ Deno.serve(async () => {
   if (token.length > 20) {
     // 1) token vale?
     const me = await g('/me', token)
-    out.token = { status: me.status, id: me.body?.id ?? null, erro: me.body?.error?.code ?? null,
-                  mensagem: me.body?.error?.message ?? null }
+    out.token = {
+      status: me.status,
+      id: me.body?.id ?? null,
+      erro: me.body?.error?.code ?? null,
+      mensagem: me.body?.error?.message ?? null,
+    }
 
     // 2) número
-    const num = await g(`/${PHONE_ID}?fields=display_phone_number,verified_name,status,quality_rating,platform_type,is_on_biz_app,account_mode,code_verification_status`, token)
-    out.numero = num.status === 200 ? num.body : { status: num.status, erro: num.body?.error?.code, mensagem: num.body?.error?.message }
+    const num = await g(
+      `/${PHONE_ID}?fields=display_phone_number,verified_name,status,quality_rating,platform_type,is_on_biz_app,account_mode,code_verification_status`,
+      token,
+    )
+    out.numero =
+      num.status === 200
+        ? num.body
+        : { status: num.status, erro: num.body?.error?.code, mensagem: num.body?.error?.message }
 
     // 3) webhook inscrito
     const subsApp = await g(`/${APP_ID}/subscriptions?access_token=${APP_ID}|${appSecret}`, '')
@@ -60,5 +78,7 @@ Deno.serve(async () => {
     out.waba_inscrita = { status: wabaSubs.status, data: wabaSubs.body?.data ?? wabaSubs.body }
   }
 
-  return new Response(JSON.stringify(out, null, 1), { headers: { 'Content-Type': 'application/json' } })
+  return new Response(JSON.stringify(out, null, 1), {
+    headers: { 'Content-Type': 'application/json' },
+  })
 })

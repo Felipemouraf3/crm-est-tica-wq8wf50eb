@@ -74,10 +74,7 @@ async function hmacSha256Hex(chave: string, texto: string): Promise<string> {
     .join('')
 }
 
-export type MapaContas = Map<
-  string,
-  { id: string; organization_id: string; clinic_id: string }
->
+export type MapaContas = Map<string, { id: string; organization_id: string; clinic_id: string }>
 
 /** Mapeia o corpo do webhook da Meta em itens normalizados. */
 export function mapearCorpoMeta(
@@ -94,7 +91,8 @@ export function mapearCorpoMeta(
     for (const mudanca of mudancas) {
       const valor = (mudanca?.value ?? {}) as Record<string, unknown>
       const metadata = (valor?.metadata ?? {}) as Record<string, unknown>
-      const phoneId = typeof metadata?.phone_number_id === 'string' ? metadata.phone_number_id : null
+      const phoneId =
+        typeof metadata?.phone_number_id === 'string' ? metadata.phone_number_id : null
       const conta = phoneId ? contasPorPhoneId.get(phoneId) : undefined
 
       const base = {
@@ -104,12 +102,23 @@ export function mapearCorpoMeta(
       }
 
       // ----- mensagens recebidas -----
-      const mensagens = Array.isArray(valor?.messages) ? (valor.messages as Record<string, unknown>[]) : []
+      const mensagens = Array.isArray(valor?.messages)
+        ? (valor.messages as Record<string, unknown>[])
+        : []
       for (const m of mensagens) {
         const id = typeof m?.id === 'string' ? m.id : null
         if (!id) continue
         const tipo = typeof m?.type === 'string' ? m.type : 'unknown'
-        const suportado = ['text', 'image', 'audio', 'video', 'document', 'sticker', 'button', 'interactive'].includes(tipo)
+        const suportado = [
+          'text',
+          'image',
+          'audio',
+          'video',
+          'document',
+          'sticker',
+          'button',
+          'interactive',
+        ].includes(tipo)
         const ts = Number(m?.timestamp)
         const ocorridoMs = Number.isFinite(ts) ? ts * 1000 : agoraMs
         itens.push({
@@ -124,7 +133,9 @@ export function mapearCorpoMeta(
       }
 
       // ----- situações (statuses) -----
-      const statuses = Array.isArray(valor?.statuses) ? (valor.statuses as Record<string, unknown>[]) : []
+      const statuses = Array.isArray(valor?.statuses)
+        ? (valor.statuses as Record<string, unknown>[])
+        : []
       for (const s of statuses) {
         const id = typeof s?.id === 'string' ? s.id : null
         const status = typeof s?.status === 'string' ? s.status : null

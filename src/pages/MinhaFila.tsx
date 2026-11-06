@@ -111,25 +111,6 @@ function MinhaFila() {
   const [novoTitulo, setNovoTitulo] = useState('')
   const [novoPrazo, setNovoPrazo] = useState('')
 
-  useEffect(() => {
-    let vivo = true
-    ;(async () => {
-      const salva = clinicaSalva()
-      const { data } = await supabase
-        .from('clinics')
-        .select('id')
-        .eq('status', 'active')
-        .order('name')
-      if (!vivo) return
-      const lista = (data ?? []) as { id: string }[]
-      const escolhida = lista.find((c) => c.id === salva) ?? lista[0]
-      if (escolhida) setClinica(escolhida.id)
-    })()
-    return () => {
-      vivo = false
-    }
-  }, [])
-
   const carregar = useCallback(async () => {
     if (!clinica) return
     setCarregando(true)
@@ -181,7 +162,13 @@ function MinhaFila() {
     if (!concluindo) return
     setSalvando(true)
     setErro(null)
-    const args: Record<string, unknown> = {
+    const args: {
+      p_task: string
+      p_result_note?: string | null
+      p_close_case?: boolean
+      p_next_title?: string | null
+      p_next_due_at?: string
+    } = {
       p_task: concluindo.id,
       p_result_note: resultado || null,
       p_close_case: false,
@@ -497,14 +484,14 @@ export default function MinhaFilaComGuarda() {
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
       const user = data.session?.user
-      if (!user) return
-      supabase
-        .from('memberships')
-        .select('role')
-        .eq('user_id', user.id)
-        .eq('active', true)
-        .limit(1)
-        .then(({ data: mem }) => setPapel((mem?.[0]?.role ?? null) as Papel | null))
+      if (!user)
+        return supabase
+          .from('memberships')
+          .select('role')
+          .eq('user_id', user.id)
+          .eq('active', true)
+          .limit(1)
+          .then(({ data: mem }) => setPapel((mem?.[0]?.role ?? null) as Papel | null))
     })
   }, [])
 
