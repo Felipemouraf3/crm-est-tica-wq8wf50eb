@@ -5232,14 +5232,14 @@ export const Constants = {
   },
 } as const
 
-// Papéis de membership (public.memberships.role) usados nas guardas de rota
-// (src/components/guards.tsx) e no menu do AppShell. A geração automática não
-// exporta este apelido; mantê-lo aqui evoca o contrato usado por todo o app.
+// Papéis de usuário (membrerships.role). Exportado manualmente: o gerador de
+// tipos não o produz — NÃO apagar ao regerar src/lib/supabase/types.ts.
 export type Papel =
   | 'owner'
   | 'clinic_admin'
   | 'manager'
   | 'sales'
-  | 'reception'
   | 'post_sales'
+  | 'reception'
+  | 'nutritionist'
   | 'viewer'

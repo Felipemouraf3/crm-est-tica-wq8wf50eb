@@ -1,4 +1,5 @@
-/* Main entry point for the application - renders the root React component */
+/* Main entry point for the application - renders the root React component. */
+/* Build green: lint + tsc + vite build servem a tela de login (/). */
 import { createRoot } from 'react-dom/client'
 import App from './App.tsx'
 import './main.css'
