@@ -1,44 +1,28 @@
 // supabase/functions/_shared/providers/clinica-experts.ts — P2-S02-T01
-// Cliente HTTP da conexão REAL com a API Clínica Experts.
-// Segue 00-CONTRATO-COMUM-FASE-2 e a SPEC P2-S02:
-//  - User-Agent próprio (a borda Cloudflare recusa clientes sem assinatura com
-//    403 código 1010 ANTES de validar o token — bloqueio_de_borda).
-//  - Classificação dos 4 formatos de erro do contrato.
-//  - rateBudget.take() guiado por x-ratelimit-remaining (90/min, espera a
-//    virada do minuto quando remaining < 10).
-//  - Telemetria sanitizada: token NUNCA em log, erro ou retorno.
-// Compatível Deno/Node (fetch padrão). Sem `as any`.
-
-// ---------- Constantes do contrato ----------
+// Cliente HTTP da conexão REAL com a API Clínica Experts (contrato P2-S02).
+// User-Agent próprio, classificação de erros, rateBudget, telemetria sanitizada.
 export const EXPERT_USER_AGENT = 'PSEstetica-CRM/1.0 (+supabase-edge)'
 export const EXPERT_BASE_URL_DEFAULT = 'https://api.clinicaexperts.com.br/api/v1'
 
-const BUDGET_POR_MIN = 90 // SPEC: 90/min (margem sob o limite de 120 da API)
-const REstanteMin = 10 // abaixo disso, espera a virada do minuto
+const BUDGET_POR_MIN = 90
+const REstanteMin = 10
 const TIMEOUT_MS = 10_000
-const MAX_TENTATIVAS = 3 // transitórios: 2 novas tentativas
+const MAX_TENTATIVAS = 3
 const BACKOFF_MS = 500
 
-// ---------- Erro operacional ----------
 export class ErroOperacional extends Error {
   code: string
   correlationId: string
   detalhe: Record<string, unknown>
-  constructor(
-    code: string,
-    mensagem: string,
-    correlationId: string,
-    detalhe: Record<string, unknown> = {},
-  ) {
+  constructor(code: string, mensagem: string, correlationId: string, detalhe: Record<string, unknown> = {}) {
     super(mensagem)
     this.name = 'ErroOperacional'
-    this.code = code // códigos do contrato comum: credencial_invalida, bloqueio_de_borda, ...
+    this.code = code
     this.correlationId = correlationId
     this.detalhe = detalhe
   }
 }
 
-// ---------- rateBudget (janela + cabeçalho do servidor) ----------
 type Budget = { stamps: number[]; restanteServidor: number | null; virada: number | null }
 const budgets = new Map<string, Budget>()
 
@@ -47,7 +31,6 @@ export function resetRateBudget() {
 }
 
 export const rateBudget = {
-  /** Devolve ms que a chamada deve esperar antes de prosseguir (0 = já pode). */
   take(connectionId: string): number {
     const agora = Date.now()
     let b = budgets.get(connectionId)
@@ -59,7 +42,6 @@ export const rateBudget = {
     if (b.stamps.length >= BUDGET_POR_MIN) {
       return 60_000 - (agora - b.stamps[0]) + 5
     }
-    // cabeçalho do servidor: abaixo de 10 restantes, espera a virada do minuto
     if (b.restanteServidor !== null && b.restanteServidor < REstanteMin && b.virada) {
       const espera = Math.max(0, b.virada - agora)
       if (espera > 0) return espera
@@ -67,21 +49,18 @@ export const rateBudget = {
     b.stamps.push(agora)
     return 0
   },
-  /** Alimenta com os cabeçalhos da última resposta. */
   updateFromHeaders(connectionId: string, headers: Headers) {
     const b = budgets.get(connectionId) ?? { stamps: [], restanteServidor: null, virada: null }
     const limite = Number(headers.get('x-ratelimit-limit'))
     const restante = Number(headers.get('x-ratelimit-remaining'))
     if (!Number.isNaN(limite) && !Number.isNaN(restante)) {
       b.restanteServidor = restante
-      // virada do minuto estimada: quando remaining volta ao limite, nova janela
       b.virada = Date.now() + 60_000 * (1 - (limite - restante) / Math.max(limite, 1))
       budgets.set(connectionId, b)
     }
   },
 }
 
-// ---------- classifyExpertError ----------
 export type CorpoErro = {
   error?: { code?: string; title?: string; fields?: unknown } | string
   success?: boolean
@@ -92,22 +71,19 @@ export type CorpoErro = {
 
 export function classifyExpertError(status: number, corpo: CorpoErro): string {
   const err = corpo?.error
-  // borda Cloudflare: recusa ANTES do token (403 código 1010)
   if (corpo?.cloudflare_error === true) return 'bloqueio_de_borda'
   if (status === 401) return 'credencial_invalida'
   if (status === 403) {
-    // módulo desabilitado: {"error":"Feature crm is not enabled"}
     if (typeof err === 'string' && /feature/i.test(err)) return 'modulo_desabilitado'
-    return 'bloqueio_de_borda' // 403 sem corpo reconhecível: assume borda
+    return 'bloqueio_de_borda'
   }
-  if (status === 404) return 'paciente_nao_encontrado' // API0011
-  if (status === 422) return 'entrada_recusada' // API0422 (fields repassados)
-  if (status === 429) return 'limite_externo' // {success:false,message}
+  if (status === 404) return 'paciente_nao_encontrado'
+  if (status === 422) return 'entrada_recusada'
+  if (status === 429) return 'limite_externo'
   if (status >= 500) return 'falha_transitoria'
   return 'falha_externa'
 }
 
-/** HTTP que a tela recebe, dado o code interno (contrato comum). */
 export function httpDeErro(code: string): number {
   switch (code) {
     case 'paciente_nao_encontrado':
@@ -120,10 +96,6 @@ export function httpDeErro(code: string): number {
       return 503
     case 'tempo_esgotado':
       return 504
-    case 'credencial_invalida':
-    case 'bloqueio_de_borda':
-    case 'falha_transitoria':
-    case 'falha_externa':
     default:
       return 502
   }
@@ -131,7 +103,6 @@ export function httpDeErro(code: string): number {
 
 const RETENTAVEIS = new Set(['limite_externo', 'falha_transitoria', 'tempo_esgotado'])
 
-// ---------- expertGet ----------
 export type ExpertGetResult = {
   status: number
   data: unknown
@@ -140,10 +111,6 @@ export type ExpertGetResult = {
   telemetria: { status: string; duracao_ms: number; tentativas: number; correlation_id: string }
 }
 
-/**
- * GET autenticado na API Clínica Experts com User-Agent próprio,
- * rate budget e classificação de erros. `caminho` relativo (ex.: 'patients').
- */
 export async function expertGet(
   baseUrl: string,
   token: string,
@@ -152,11 +119,7 @@ export async function expertGet(
   opcoes: Record<string, unknown> = {},
 ): Promise<ExpertGetResult> {
   if (!baseUrl || !token) {
-    throw new ErroOperacional(
-      'credencial_invalida',
-      'Conexão não configurada (base ou token ausente).',
-      opcoes.correlationId ?? '-',
-    )
+    throw new ErroOperacional('credencial_invalida', 'Conexão não configurada (base ou token ausente).', opcoes.correlationId ?? '-')
   }
   const connectionId = (opcoes.connectionId as string) ?? 'principal'
   const correlationId = (opcoes.correlationId as string) ?? crypto.randomUUID()
@@ -170,7 +133,7 @@ export async function expertGet(
     const espera = rateBudget.take(connectionId)
     if (espera > 0) {
       await new Promise((r) => setTimeout(r, Math.min(espera, 5_000)))
-      tentativa-- // espera do budget não consome tentativa
+      tentativa--
       continue
     }
 
@@ -183,9 +146,9 @@ export async function expertGet(
         {
           method: 'GET',
           headers: {
-            Authorization: `Bearer ${token}`, // só aqui — nunca em log/telemetria
+            Authorization: `Bearer ${token}`,
             Accept: 'application/json',
-            'User-Agent': EXPERT_USER_AGENT, // exigido pela borda (403/1010 sem isso)
+            'User-Agent': EXPERT_USER_AGENT,
             'x-correlation-id': correlationId,
           },
           signal: controller.signal,
@@ -208,12 +171,7 @@ export async function expertGet(
           data: corpo.data ?? corpo,
           meta: corpo.meta ?? null,
           headers: resp.headers,
-          telemetria: {
-            status: 'ok',
-            duracao_ms: Date.now() - t0,
-            tentativas: tentativa,
-            correlation_id: correlationId,
-          },
+          telemetria: { status: 'ok', duracao_ms: Date.now() - t0, tentativas: tentativa, correlation_id: correlationId },
         }
       }
 
@@ -224,27 +182,20 @@ export async function expertGet(
           fields: (corpo?.error as { fields?: unknown })?.fields ?? undefined,
         })
       }
-      // transitório: backoff e nova tentativa
       await new Promise((r) => setTimeout(r, BACKOFF_MS * 2 ** (tentativa - 1)))
     } catch (e: unknown) {
       clearTimeout(timer)
       if (e instanceof ErroOperacional) throw e
       const nome = (e as { name?: string })?.name ?? ''
       if (nome === 'AbortError') {
-        const code = 'tempo_esgotado'
         if (tentativa >= maxTentativas) {
-          throw new ErroOperacional(code, `Tempo esgotado após ${timeoutMs} ms.`, correlationId)
+          throw new ErroOperacional('tempo_esgotado', `Tempo esgotado após ${timeoutMs} ms.`, correlationId)
         }
         await new Promise((r) => setTimeout(r, BACKOFF_MS * 2 ** (tentativa - 1)))
         continue
       }
-      // rede/DNS: transitório
       if (tentativa >= maxTentativas) {
-        throw new ErroOperacional(
-          'falha_transitoria',
-          'Falha de rede ao contatar a API.',
-          correlationId,
-        )
+        throw new ErroOperacional('falha_transitoria', 'Falha de rede ao contatar a API.', correlationId)
       }
       await new Promise((r) => setTimeout(r, BACKOFF_MS * 2 ** (tentativa - 1)))
     }
@@ -263,7 +214,7 @@ function mensagemDe(code: string, httpStatus: number): string {
     case 'paciente_nao_encontrado':
       return 'Paciente não encontrado (404 API0011).'
     case 'entrada_recusada':
-      return 'Entrada rejeitada pela API (422 API0422).'
+      return 'Entrada recusada pela API (422 API0422).'
     case 'limite_externo':
       return 'Limite de taxa da API atingido (429).'
     case 'falha_transitoria':
@@ -273,26 +224,30 @@ function mensagemDe(code: string, httpStatus: number): string {
   }
 }
 
-// ---------- leitor mínimo de paciente ----------
 export type ExpertPatientMin = {
   expert_patient_uuid: string
   name: string
   phone_e164: string | null
-  birth_date: string | null // YYYY-MM-DD; nunca exibido inteiro
+  birth_date: string | null
   active: boolean
   source_created_at: string
 }
 
-/** Descarta tudo que não está na lista (documents, address, email, ...). */
 export function lerPacienteMinimo(bruto: Record<string, unknown>): ExpertPatientMin | null {
-  const uuid =
-    typeof bruto?.id === 'string' ? bruto.id : typeof bruto?.uuid === 'string' ? bruto.uuid : null
+  const uuid = typeof bruto?.id === 'string' ? bruto.id : typeof bruto?.uuid === 'string' ? bruto.uuid : null
   if (!uuid) return null
   return {
     expert_patient_uuid: uuid,
     name: typeof bruto?.name === 'string' ? bruto.name : '',
     phone_e164: typeof bruto?.phone === 'string' ? bruto.phone : null,
-    birth_date: typeof bruto?.birth_date === 'string' ? bruto.birth_date : null,
+    // A API v1 devolve `date_birth` (confirmado na doc oficial e na resposta real);
+    // `birth_date` fica como tolerância para variações.
+    birth_date:
+      typeof bruto?.date_birth === 'string'
+        ? bruto.date_birth
+        : typeof bruto?.birth_date === 'string'
+          ? bruto.birth_date
+          : null,
     active: bruto?.active !== false,
     source_created_at: typeof bruto?.created_at === 'string' ? bruto.created_at : '',
   }

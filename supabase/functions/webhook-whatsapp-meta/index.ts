@@ -1,13 +1,26 @@
-// Edge Function webhook-whatsapp-meta v1 — P2-S03-T02
+// Edge Function webhook-whatsapp-meta v4 — P2-S03-T02 (correção 27/10)
+// v4 (2026-10-28): grava o corpo bruto no bucket privado `webhook-payloads` e
+// guarda o `payload_ref` no recibo — mesmo padrão da Z-API. SEM ISSO O CANAL META
+// NÃO FUNCIONAVA: o consumidor (process-inbound-event) lê o payload por
+// payload_ref; como era null, `extrairFromE164` devolvia null e TODO item era
+// arquivado sem criar contato/conversa/mensagem (recibo ficava 'accepted', o que
+// escondia a falha). O payload_hash passou a ser o SHA-256 do corpo real
+// (antes era o hash do id do evento, inútil para auditoria).
+// v3 (2026-10-27): o schema `vault` NÃO é exposto na API PostgREST (pgrst.db_schemas
+// vazio; REST com Accept-Profile: vault -> 406), então admin.schema('vault') devolvia
+// vazio e o webhook recusava TODO GET (403) e TODO POST (401). Agora lê pela RPC
+// SECURITY DEFINER `_edge_read_secret` — mesmo padrão já usado na Z-API.
+// Além disso, o App Secret vem da SEGUNDA conexão `<external_account_id>:app_secret`
+// (antes o código usava o access token da conexão principal como chave HMAC).
 // Rota pública: /functions/v1/webhook-whatsapp-meta (sem JWT — assinatura HMAC).
 // GET: verificação hub.verify_token contra os verify_tokens no Vault das contas
-//      Meta ativas → 200 hub.challenge | 403.
-// POST: X-Hub-Signature-256 (HMAC app_secret, tempo constante) → 401 se inválida.
+//      Meta ativas -> 200 hub.challenge | 403.
+// POST: X-Hub-Signature-256 (HMAC app_secret, tempo constante) -> 401 se inválida.
 //       200 SEMPRE que a assinatura for válida (mesmo duplicata) — RN-P2-S03-02/03.
 // Cada item vira um recibo (webhook_receipts) e, quando mapeado e fresco,
 // um item na fila inbound_events (envelope do contrato comum — sem conteúdo).
-// RN-P2-S03-04: número não mapeado → recibo rejected_unmapped + fila técnica.
-// RN-P2-S03-08: evento > 24h → recibo rejected_stale, sem fila.
+// RN-P2-S03-04: número não mapeado -> recibo rejected_unmapped + fila técnica.
+// RN-P2-S03-08: evento > 24h -> recibo rejected_stale, sem fila.
 // Logs sanitizados: nunca corpo, token, telefone completo ou texto.
 // @ts-nocheck
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
@@ -48,41 +61,37 @@ Deno.serve(async (req: Request) => {
       .in('status', ['active', 'paused'])
     const contasAtivas = contas ?? []
 
-    // verify_tokens (webhook_secret_ref) e app_secrets (token da conexão) do Vault
-    const refs = contasAtivas.map((c) => c.webhook_secret_ref.replace('vault:', ''))
-    const connIds = contasAtivas.map((c) => c.integration_connection_id)
-    const segredosWebhook = new Map<string, string>() // secret_ref uuid → valor
-    const appSecrets = new Map<string, string>() // channel_account_id → app_secret
-    if (refs.length) {
-      const { data: secs } = await admin
-        .schema('vault')
-        .from('secrets')
-        .select('id, secret')
-        .in('id', refs)
-      for (const s of secs ?? []) segredosWebhook.set(s.id, s.secret)
+    // v3: segredos SEMPRE pela RPC SECURITY DEFINER (_edge_read_secret).
+    // Motivo: o schema `vault` não está exposto no PostgREST — a leitura direta
+    // devolvia vazio e derrubava a verificação (403) e a assinatura (401).
+    const lerSegredo = async (ref: string | null): Promise<string | null> => {
+      if (!ref || !ref.startsWith('vault:')) return null
+      const { data } = await admin.rpc('_edge_read_secret', { p_secret_ref: ref })
+      return typeof data === 'string' && data.length > 0 ? data : null
     }
-    if (connIds.length) {
-      const { data: conns } = await admin
+
+    const segredosWebhook = new Map<string, string>() // channel_account_id -> verify_token
+    const appSecrets = new Map<string, string>() // channel_account_id -> app_secret
+    for (const conta of contasAtivas) {
+      const verify = await lerSegredo(conta.webhook_secret_ref)
+      if (verify) segredosWebhook.set(conta.id, verify)
+
+      // App Secret: segunda conexão do canal `<external_account_id>:app_secret`
+      const { data: conn2 } = await admin
         .from('integration_connections')
-        .select('id, secret_ref')
-        .in('id', connIds)
-      for (const c of conns ?? []) {
-        if (c.secret_ref?.startsWith('vault:')) {
-          const { data: s } = await admin
-            .schema('vault')
-            .from('secrets')
-            .select('secret')
-            .eq('id', c.secret_ref.replace('vault:', ''))
-            .maybeSingle()
-          if (s?.secret) appSecrets.set(c.id, s.secret)
-        }
-      }
+        .select('secret_ref')
+        .eq('clinic_id', conta.clinic_id)
+        .eq('provider', 'canal_meta_cloud')
+        .eq('connection_key', `${conta.external_account_id}:app_secret`)
+        .maybeSingle()
+      const appSecret = await lerSegredo(conn2?.secret_ref ?? null)
+      if (appSecret) appSecrets.set(conta.id, appSecret)
     }
 
     // ---------- GET: verificação ----------
     if (req.method === 'GET') {
       const tokensValidos = contasAtivas
-        .map((c) => segredosWebhook.get(c.webhook_secret_ref.replace('vault:', '')))
+        .map((c) => segredosWebhook.get(c.id))
         .filter((t): t is string => !!t)
       const r = respostaVerificacao(url, tokensValidos)
       return txt(r.status, r.corpo)
@@ -188,6 +197,9 @@ Deno.serve(async (req: Request) => {
         continue
       }
 
+      // v4: grava o corpo bruto no bucket privado webhook-payloads e guarda o
+      // payload_ref — o consumidor (process-inbound-event) lê o payload por ali.
+      // Sem isso, extrairFromE164 devolvia null e TODO item era descartado.
       const { error: errRecibo } = await admin.from('webhook_receipts').insert({
         provider: 'meta_cloud',
         channel_account_id: item.channel_account_id,
@@ -196,12 +208,18 @@ Deno.serve(async (req: Request) => {
         external_event_id: item.external_event_id,
         event_kind: item.kind,
         signature_valid: true,
-        payload_hash: await sha256Hex(JSON.stringify({ id: item.external_event_id })),
+        payload_hash: await sha256Hex(corpoBruto),
+        payload_ref: await gravarPayload(
+          admin,
+          item.organization_id,
+          item.external_event_id,
+          corpoBruto,
+        ),
         status: statusRecibo,
         correlation_id: correlationId,
       })
       if (errRecibo) {
-        // corrida: outro worker inseriu primeiro → duplicata
+        // corrida: outro worker inseriu primeiro -> duplicata
         duplicados++
         continue
       }
@@ -212,7 +230,7 @@ Deno.serve(async (req: Request) => {
       }
       aceitos++
 
-      // situação do provedor (statuses) → provider_message_status
+      // situação do provedor (statuses) -> provider_message_status
       if (item.kind === 'status' && item.provider_message_id && item.status) {
         await admin.from('provider_message_status').upsert(
           {
@@ -234,7 +252,7 @@ Deno.serve(async (req: Request) => {
           .eq('id', item.channel_account_id)
       }
 
-      // mensagem recebida → fila inbound_events (envelope sem conteúdo)
+      // mensagem recebida -> fila inbound_events (envelope sem conteúdo)
       if (item.kind === 'message') {
         await admin
           .from('channel_accounts')
@@ -271,4 +289,30 @@ async function sha256Hex(texto: string): Promise<string> {
   return Array.from(new Uint8Array(digest))
     .map((b) => b.toString(16).padStart(2, '0'))
     .join('')
+}
+
+// Emenda P2-S03-T02 (destrava o consumidor): grava o corpo bruto no bucket
+// privado webhook-payloads e devolve o payload_ref — mesmo padrão da Z-API.
+// Falha de storage NÃO derruba o webhook (o recibo fica sem ref e o item é
+// descartado pelo consumidor, mas a Meta recebe 200 e não reentrega em loop).
+async function gravarPayload(
+  admin: any,
+  organizationId: string | null,
+  externalEventId: string,
+  corpoBruto: string,
+): Promise<string | null> {
+  if (!organizationId) return null
+  try {
+    const hoje = new Date().toISOString().slice(0, 10)
+    const seguro = externalEventId.replace(/[^A-Za-z0-9._-]/g, '_')
+    const caminho = `webhook-payloads/${organizationId}/${hoje}/${seguro}.json`
+    const { error } = await admin.storage.from('webhook-payloads').upload(caminho, corpoBruto, {
+      contentType: 'application/json',
+      upsert: true,
+    })
+    if (error) return null
+    return caminho
+  } catch {
+    return null
+  }
 }

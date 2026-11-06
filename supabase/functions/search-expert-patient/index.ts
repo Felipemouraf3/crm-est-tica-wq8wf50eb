@@ -1,13 +1,8 @@
-// Edge Function search-expert-patient v2 — P2-S02-T02
-// Mudanças da v1 (P1-S05-T02):
-//   - busca em DUAS ETAPAS via _shared/providers/expert-search.ts
-//     (a: E.164 · b: últimos 8 dígitos com filtro de DDD → provavel)
-//   - contrato de saída da SPEC: { data: { result_class, phone_e164,
-//     candidates[{expert_patient_uuid,name,birth_masked,active}],
-//     linked_patient_uuid, cache_hit }, correlation_id }
-//   - cache grava candidatos mínimos (nunca dado sensível)
-// Mantém: JWT obrigatório, acesso por organização (RLS), cache TTL 1h,
-// erros sanitizados com correlation_id, falha não bloqueia conversa local.
+// Edge Function search-expert-patient v5 — P2-S02-T02
+// v5 (2026-10-27): corrige o mapeamento do nascimento (a API devolve `date_birth`,
+// não `birth_date`) e invalida cache antigo sem birth_masked via force_refresh.
+// v4 (2026-10-24): leitura do token via RPC _edge_read_secret (com sanitização
+// de whitespace). v3 provou: schema vault não exposto na API PostgREST.
 // @ts-nocheck
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { buscarEmDuasEtapas } from '../_shared/providers/expert-search.ts'
@@ -16,6 +11,7 @@ import { EXPERT_BASE_URL_DEFAULT } from '../_shared/providers/clinica-experts.ts
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
   'Content-Type': 'application/json',
 }
 
@@ -26,8 +22,6 @@ Deno.serve(async (req: Request) => {
   const correlationId = crypto.randomUUID()
   try {
     if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
-
-    // 1. JWT obrigatório
     const authHeader = req.headers.get('Authorization') ?? ''
     if (!authHeader.startsWith('Bearer ') || authHeader === 'Bearer ') {
       return resp(401, { erro: 'autenticacao', correlation_id: correlationId })
@@ -41,56 +35,32 @@ Deno.serve(async (req: Request) => {
       return resp(401, { erro: 'autenticacao', correlation_id: correlationId })
     }
 
-    // 2. Entrada: { clinic_id, phone, force_refresh? }
     const body = await req.json().catch(() => ({}))
     const clinicId = body?.clinic_id
     const phoneRaw = body?.phone
     const forceRefresh = body?.force_refresh === true || body?.forcar_api === true
     if (!clinicId || !phoneRaw) {
-      return resp(400, {
-        erro: 'entrada',
-        mensagem: 'clinic_id e phone são obrigatórios',
-        correlation_id: correlationId,
-      })
+      return resp(400, { erro: 'entrada', mensagem: 'clinic_id e phone são obrigatórios', correlation_id: correlationId })
     }
 
-    // 3. Normalização E.164 server-side (RPC da migration)
-    const { data: phoneE164, error: normErr } = await userClient.rpc('normalize_e164', {
-      p_raw: phoneRaw,
-    })
+    const { data: phoneE164, error: normErr } = await userClient.rpc('normalize_e164', { p_raw: phoneRaw })
     if (normErr || !phoneE164) {
-      return resp(400, {
-        erro: 'entrada',
-        mensagem: 'Telefone inválido para E.164',
-        correlation_id: correlationId,
-      })
+      return resp(400, { erro: 'entrada', mensagem: 'Telefone inválido para E.164', correlation_id: correlationId })
     }
 
-    // 4. Acesso: clínica ativa + membro da organização (RLS decide)
     const { data: clinicRow, error: clinicErr } = await userClient
       .from('clinics')
       .select('id, organization_id, status')
       .eq('id', clinicId)
       .maybeSingle()
     if (clinicErr || !clinicRow || clinicRow.status !== 'active') {
-      return resp(403, {
-        erro: 'permissao',
-        mensagem: 'Clínica não encontrada ou inativa',
-        correlation_id: correlationId,
-      })
+      return resp(403, { erro: 'permissao', mensagem: 'Clínica não encontrada ou inativa', correlation_id: correlationId })
     }
-    const { data: membro, error: membroErr } = await userClient.rpc('is_org_member', {
-      p_org: clinicRow.organization_id,
-    })
+    const { data: membro, error: membroErr } = await userClient.rpc('is_org_member', { p_org: clinicRow.organization_id })
     if (membroErr || membro !== true) {
-      return resp(403, {
-        erro: 'permissao',
-        mensagem: 'Sem permissão nesta clínica',
-        correlation_id: correlationId,
-      })
+      return resp(403, { erro: 'permissao', mensagem: 'Sem permissão nesta clínica', correlation_id: correlationId })
     }
 
-    // 5. Cache (TTL): válido se não invalidado e dentro do prazo
     if (!forceRefresh) {
       const { data: cacheRow } = await userClient
         .from('expert_patients_cache')
@@ -114,7 +84,6 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    // 6. Config: base URL (env; default do contrato) + token (Vault via service role)
     const baseUrl = Deno.env.get('EXPERT_API_BASE_URL') ?? EXPERT_BASE_URL_DEFAULT
     const adminClient = createClient(SUPABASE_URL, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '')
     const { data: conn } = await adminClient
@@ -126,23 +95,14 @@ Deno.serve(async (req: Request) => {
       .maybeSingle()
     let token: string | null = null
     if (conn?.secret_ref?.startsWith('vault:')) {
-      const { data: sec } = await adminClient
-        .schema('vault')
-        .from('secrets')
-        .select('secret')
-        .eq('id', conn.secret_ref.replace('vault:', ''))
-        .maybeSingle()
-      token = sec?.secret ?? null
+      // v4: ler via RPC SECURITY DEFINER (com sanitização de whitespace)
+      const { data: segredo } = await adminClient.rpc('_edge_read_secret', { p_secret_ref: conn.secret_ref })
+      token = typeof segredo === 'string' && segredo.length > 0 ? segredo : null
     }
     if (!token) {
-      return resp(503, {
-        erro: 'credencial',
-        mensagem: 'Token da API não configurado (salve via /admin)',
-        correlation_id: correlationId,
-      })
+      return resp(503, { erro: 'credencial', mensagem: 'Token da API não configurado (salve via /admin)', correlation_id: correlationId })
     }
 
-    // 7. Busca em duas etapas (módulo T02; erros tipados do contrato T01)
     let busca
     try {
       busca = await buscarEmDuasEtapas(baseUrl, token, phoneE164, { correlationId })
@@ -167,7 +127,6 @@ Deno.serve(async (req: Request) => {
       })
     }
 
-    // 8. Cache (TTL 1h) — só candidatos mínimos (uuid/name/birth_masked/active)
     const expiresAt = new Date(Date.now() + 3600 * 1000).toISOString()
     const payload = {
       candidates: busca.candidatos.map((c) => ({
@@ -192,7 +151,6 @@ Deno.serve(async (req: Request) => {
       { onConflict: 'clinic_id,phone_e164' },
     )
 
-    // 9. Contrato de saída da SPEC
     return resp(200, {
       data: {
         result_class: busca.result_class,

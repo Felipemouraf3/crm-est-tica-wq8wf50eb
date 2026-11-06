@@ -1,13 +1,11 @@
-// Edge Function webhook-whatsapp-zapi v1 — P2-S03-T03
+// Edge Function webhook-whatsapp-zapi v5 — P2-S03-T03 + emenda payload (P2-S04-T01)
+// v5: usa o adaptador zapi.ts corrigido (image.imageUrl + caption — mídia real da Z-API).
 // Rota pública: /functions/v1/webhook-whatsapp-zapi?ca=<channel_account_id>&k=<segredo>
-// (sem JWT — a Z-API não assina webhooks; proteção por caminho com segredo).
-// Validação: segredo do caminho (tempo constante, contra o Vault) + instanceId
-// do corpo == external_account_id da conta indicada em ca.
+// Validação: segredo do caminho (tempo constante, contra o Vault) + instanceId.
 // Limite: 120 pedidos/min por conta → 429 rejected_rate (RN-P2-S03-08).
-// Cada item vira um recibo (webhook_receipts) e, quando mapeado e fresco,
-// um item na fila inbound_events (envelope do contrato comum — sem conteúdo).
-// DisconnectedCallback → conta disconnected (RN-P2-S03-07); ConnectedCallback
-// NUNCA reativa automaticamente (só admin).
+// Cada item vira um recibo e, quando aceito, um item na fila inbound_events
+// (envelope com ref_id — o consumidor lê o payload pelo bucket webhook-payloads).
+// DisconnectedCallback → conta disconnected; ConnectedCallback NUNCA reativa.
 // Logs sanitizados: nunca corpo, token, telefone completo ou texto.
 // @ts-nocheck
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
@@ -33,20 +31,13 @@ Deno.serve(async (req: Request) => {
   try {
     if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
     if (req.method !== 'POST') {
-      return json(405, {
-        error: { code: 'metodo_invalido', message: 'Método não suportado' },
-        correlation_id: correlationId,
-      })
+      return json(405, { error: { code: 'metodo_invalido', message: 'Método não suportado' }, correlation_id: correlationId })
     }
 
-    // ---------- 1. caminho: ca + k ----------
     const caParam = url.searchParams.get('ca') ?? ''
     const kParam = url.searchParams.get('k') ?? ''
     if (!caParam || !kParam) {
-      return json(401, {
-        error: { code: 'caminho_invalido', message: 'Caminho incompleto' },
-        correlation_id: correlationId,
-      })
+      return json(401, { error: { code: 'caminho_invalido', message: 'Caminho incompleto' }, correlation_id: correlationId })
     }
 
     const { data: conta } = await admin
@@ -57,37 +48,20 @@ Deno.serve(async (req: Request) => {
       .in('status', ['active', 'paused', 'disconnected'])
       .maybeSingle()
     if (!conta?.webhook_secret_ref?.startsWith('vault:')) {
-      return json(401, {
-        error: { code: 'caminho_invalido', message: 'Caminho inválido' },
-        correlation_id: correlationId,
-      })
+      return json(401, { error: { code: 'caminho_invalido', message: 'Caminho inválido' }, correlation_id: correlationId })
     }
 
-    // segredo do caminho no Vault (via RPC SECURITY DEFINER — schema vault não
-    // está exposto na API PostgREST; lição de 2026-10-24)
-    const { data: segredo } = await admin.rpc('_edge_read_secret', {
-      p_secret_ref: conta.webhook_secret_ref,
-    })
+    const { data: segredo } = await admin.rpc('_edge_read_secret', { p_secret_ref: conta.webhook_secret_ref })
     if (!segredo || !segredoValido(segredo, kParam)) {
       await admin.from('webhook_receipts').insert({
-        provider: 'z_api',
-        channel_account_id: conta.id,
-        organization_id: conta.organization_id,
-        clinic_id: conta.clinic_id,
-        external_event_id: `sig_${correlationId}`,
-        event_kind: 'other',
-        signature_valid: false,
-        payload_hash: await sha256Hex(`${caParam}`),
-        status: 'rejected_signature',
+        provider: 'z_api', channel_account_id: conta.id, organization_id: conta.organization_id,
+        clinic_id: conta.clinic_id, external_event_id: `sig_${correlationId}`, event_kind: 'other',
+        signature_valid: false, payload_hash: await sha256Hex(`${caParam}`), status: 'rejected_signature',
         correlation_id: correlationId,
       })
-      return json(401, {
-        error: { code: 'segredo_invalido', message: 'Segredo inválido' },
-        correlation_id: correlationId,
-      })
+      return json(401, { error: { code: 'segredo_invalido', message: 'Segredo inválido' }, correlation_id: correlationId })
     }
 
-    // ---------- 2. limite 120/min por conta ----------
     const { data: janela } = await admin
       .from('webhook_receipts')
       .select('id', { count: 'exact', head: false })
@@ -97,55 +71,32 @@ Deno.serve(async (req: Request) => {
     const recebidos = janela?.length ?? 0
     if (recebidos >= LIMITE_POR_MIN) {
       await admin.from('webhook_receipts').insert({
-        provider: 'z_api',
-        channel_account_id: conta.id,
-        organization_id: conta.organization_id,
-        clinic_id: conta.clinic_id,
-        external_event_id: `rate_${correlationId}`,
-        event_kind: 'other',
-        signature_valid: true,
-        payload_hash: await sha256Hex(`${caParam}:rate`),
-        status: 'rejected_rate',
+        provider: 'z_api', channel_account_id: conta.id, organization_id: conta.organization_id,
+        clinic_id: conta.clinic_id, external_event_id: `rate_${correlationId}`, event_kind: 'other',
+        signature_valid: true, payload_hash: await sha256Hex(`${caParam}:rate`), status: 'rejected_rate',
         correlation_id: correlationId,
       })
-      return json(429, {
-        error: { code: 'rejected_rate', message: 'Limite de requisições por minuto' },
-        correlation_id: correlationId,
-      })
+      return json(429, { error: { code: 'rejected_rate', message: 'Limite de requisições por minuto' }, correlation_id: correlationId })
     }
 
-    // ---------- 3. corpo + instanceId ----------
     const corpoBruto = await req.text()
     let corpo: Record<string, unknown> = {}
     try {
       corpo = JSON.parse(corpoBruto)
     } catch {
-      return json(400, {
-        error: { code: 'entrada_invalida', message: 'Corpo não é JSON' },
-        correlation_id: correlationId,
-      })
+      return json(400, { error: { code: 'entrada_invalida', message: 'Corpo não é JSON' }, correlation_id: correlationId })
     }
     const instanceIdCorpo = typeof corpo?.instanceId === 'string' ? corpo.instanceId : ''
     if (!instanceIdCorpo || instanceIdCorpo !== conta.external_account_id) {
       await admin.from('webhook_receipts').insert({
-        provider: 'z_api',
-        channel_account_id: conta.id,
-        organization_id: conta.organization_id,
-        clinic_id: conta.clinic_id,
-        external_event_id: `inst_${correlationId}`,
-        event_kind: 'other',
-        signature_valid: true,
-        payload_hash: await sha256Hex(corpoBruto.slice(0, 512)),
-        status: 'rejected_signature', // instanceId trocado = evento não pertence à conta
+        provider: 'z_api', channel_account_id: conta.id, organization_id: conta.organization_id,
+        clinic_id: conta.clinic_id, external_event_id: `inst_${correlationId}`, event_kind: 'other',
+        signature_valid: true, payload_hash: await sha256Hex(corpoBruto.slice(0, 512)), status: 'rejected_signature',
         correlation_id: correlationId,
       })
-      return json(401, {
-        error: { code: 'instance_invalido', message: 'Instância não corresponde à conta' },
-        correlation_id: correlationId,
-      })
+      return json(401, { error: { code: 'instance_invalido', message: 'Instância não corresponde à conta' }, correlation_id: correlationId })
     }
 
-    // ---------- 4. mapeamento ----------
     const itens = mapearCorpoZapi(corpo, {
       id: conta.id,
       organization_id: conta.organization_id,
@@ -159,17 +110,13 @@ Deno.serve(async (req: Request) => {
     for (const item of itens as ItemZapi[]) {
       const statusRecibo = item.stale ? 'rejected_stale' : item.unsupported ? 'ignored' : 'accepted'
 
-      // idempotência: (provider, external_event_id) único
       const { data: dup } = await admin
         .from('webhook_receipts')
         .select('id')
         .eq('provider', 'z_api')
         .eq('external_event_id', item.external_event_id)
         .maybeSingle()
-      if (dup) {
-        duplicados++
-        continue
-      }
+      if (dup) { duplicados++; continue }
 
       const { error: errRecibo } = await admin.from('webhook_receipts').insert({
         provider: 'z_api',
@@ -179,43 +126,25 @@ Deno.serve(async (req: Request) => {
         external_event_id: item.external_event_id,
         event_kind: item.kind,
         signature_valid: true,
-        payload_hash: await sha256Hex(JSON.stringify({ id: item.external_event_id })),
+        payload_hash: await sha256Hex(corpoBruto),
+        payload_ref: await gravarPayload(admin, item.organization_id, item.external_event_id, corpoBruto),
         status: statusRecibo,
         correlation_id: correlationId,
       })
-      if (errRecibo) {
-        duplicados++ // corrida: outro worker inseriu primeiro
-        continue
-      }
+      if (errRecibo) { duplicados++; continue }
 
-      if (statusRecibo !== 'accepted') {
-        rejeitados++
-        continue
-      }
+      if (statusRecibo !== 'accepted') { rejeitados++; continue }
       aceitos++
 
-      // ---------- desconexão (RN-P2-S03-07) ----------
       if (item.desconectar) {
-        await admin
-          .from('channel_accounts')
-          .update({
-            status: 'disconnected',
-            last_status_at: new Date().toISOString(),
-            last_error_code: 'desconectada',
-          })
-          .eq('id', conta.id)
+        await admin.from('channel_accounts').update({ status: 'disconnected', last_status_at: new Date().toISOString(), last_error_code: 'desconectada' }).eq('id', conta.id)
         continue
       }
       if (item.kind === 'connection') {
-        // ConnectedCallback: registra; reativação é SÓ do administrador
-        await admin
-          .from('channel_accounts')
-          .update({ last_status_at: new Date().toISOString() })
-          .eq('id', conta.id)
+        await admin.from('channel_accounts').update({ last_status_at: new Date().toISOString() }).eq('id', conta.id)
         continue
       }
 
-      // ---------- situação do provedor ----------
       if (item.kind === 'status' && item.provider_message_id && item.status) {
         await admin.from('provider_message_status').upsert(
           {
@@ -230,19 +159,12 @@ Deno.serve(async (req: Request) => {
           },
           { onConflict: 'provider,provider_message_id,status' },
         )
-        await admin
-          .from('channel_accounts')
-          .update({ last_status_at: new Date().toISOString() })
-          .eq('id', conta.id)
+        await admin.from('channel_accounts').update({ last_status_at: new Date().toISOString() }).eq('id', conta.id)
         continue
       }
 
-      // ---------- mensagem recebida → fila ----------
       if (item.kind === 'message') {
-        await admin
-          .from('channel_accounts')
-          .update({ last_inbound_at: new Date().toISOString() })
-          .eq('id', conta.id)
+        await admin.from('channel_accounts').update({ last_inbound_at: new Date().toISOString() }).eq('id', conta.id)
         await admin.schema('pgmq').rpc('send', {
           queue_name: 'inbound_events',
           msg: {
@@ -251,6 +173,7 @@ Deno.serve(async (req: Request) => {
             clinic_id: item.clinic_id,
             channel_account_id: conta.id,
             provider: 'z_api',
+            ref_id: item.external_event_id,
             external_event_id: item.external_event_id,
             correlation_id: correlationId,
             attempt: 1,
@@ -262,10 +185,7 @@ Deno.serve(async (req: Request) => {
 
     return json(200, { data: { aceitos, duplicados, rejeitados }, correlation_id: correlationId })
   } catch (e) {
-    return json(500, {
-      error: { code: 'inesperado', message: 'Erro interno' },
-      correlation_id: correlationId,
-    })
+    return json(500, { error: { code: 'inesperado', message: 'Erro interno' }, correlation_id: correlationId })
   }
 })
 
@@ -274,4 +194,25 @@ async function sha256Hex(texto: string): Promise<string> {
   return Array.from(new Uint8Array(digest))
     .map((b) => b.toString(16).padStart(2, '0'))
     .join('')
+}
+
+// Emenda P2-S03 (destrava P2-S04-T01): grava o corpo bruto no bucket privado
+// webhook-payloads e devolve o payload_ref. Falha de storage NÃO derruba o webhook.
+async function gravarPayload(
+  admin: any,
+  organizationId: string,
+  externalEventId: string,
+  corpoBruto: string,
+): Promise<string | null> {
+  try {
+    const hoje = new Date().toISOString().slice(0, 10)
+    const caminho = `webhook-payloads/${organizationId}/${hoje}/${externalEventId}.json`
+    const { error } = await admin.storage.from('webhook-payloads').upload(caminho, corpoBruto, {
+      contentType: 'application/json', upsert: true,
+    })
+    if (error) return null
+    return caminho
+  } catch {
+    return null
+  }
 }

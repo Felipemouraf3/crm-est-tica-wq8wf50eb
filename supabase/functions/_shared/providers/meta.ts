@@ -1,52 +1,35 @@
 // supabase/functions/_shared/providers/meta.ts — P2-S03-T02
-// Adaptador da Meta Cloud API (WhatsApp) conforme SPEC-P2-S03 e contrato comum:
-//  - verificação GET (hub.mode/hub.verify_token/hub.challenge) → 200 challenge | 403
-//  - assinatura X-Hub-Signature-256 = sha256=HMAC_SHA256(app_secret, corpo_bruto),
-//    comparação em tempo constante → 200 válido | 401 inválida
-//  - mapeamento entry[].changes[].value → recibos por item (wamid / wamid:status)
-//  - stale: messages[].timestamp > 24h → rejected_stale (RN-P2-S03-08)
-//  - envio: POST graph.facebook.com/<versão>/<phone_number_id>/messages
-//    (texto e modelo); resposta messages[0].id → provider_message_id
-//  - janela 24h: texto livre só com entrada < 24h; fora → blocked janela_fechada
-//    (RN-P2-S03-06/07)
-// Telemetria sanitizada: token/segredo/corpo NUNCA em log ou erro.
-// Compatível Deno (WebCrypto). Sem `as any`.
+// Adaptador da Meta Cloud API: assinatura HMAC, verificação de webhook,
+// mapeamento de corpos recebidos, envio de texto e de modelo.
+export const META_GRAPH_VERSION = 'v21.0'
+export const META_GRAPH_BASE = `https://graph.facebook.com/${META_GRAPH_VERSION}`
 
-// ---------- constantes ----------
-export const META_GRAPH_DEFAULT_VERSION = 'v21.0'
-export const JANELA_24H_MS = 24 * 60 * 60 * 1000
-export const TOLERANCIA_STALE_MS = JANELA_24H_MS // reenvio > 24h → rejected_stale
+/** Tempo máximo (ms) de um evento considerada fresco (RN-P2-S03-08: 24h). */
+export const META_STALE_MS = 24 * 60 * 60 * 1000
 
-// ---------- assinatura ----------
-/** HMAC-SHA256 em tempo constante: X-Hub-Signature-256 = "sha256=<hex>" */
-export async function assinaturaValida(
-  appSecret: string,
-  corpoBruto: string,
-  headerAssinatura: string | null,
-): Promise<boolean> {
-  if (!headerAssinatura || !headerAssinatura.startsWith('sha256=')) return false
-  const recebida = headerAssinatura.slice('sha256='.length).trim().toLowerCase()
-  const key = await crypto.subtle.importKey(
-    'raw',
-    new TextEncoder().encode(appSecret),
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign'],
-  )
-  const mac = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(corpoBruto))
-  const esperada = Array.from(new Uint8Array(mac))
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('')
-  if (recebida.length !== esperada.length) return false
-  // comparação em tempo constante
-  let diff = 0
-  for (let i = 0; i < esperada.length; i++) {
-    diff |= esperada.charCodeAt(i) ^ recebida.charCodeAt(i)
-  }
-  return diff === 0
+export type ItemMeta = {
+  kind: 'message' | 'status' | 'other'
+  external_event_id: string
+  channel_account_id: string | null
+  organization_id: string | null
+  clinic_id: string | null
+  provider_message_id?: string | null
+  status?: string | null
+  error_code?: string | null
+  occurred_at?: string | null
+  stale?: boolean
+  unsupported?: boolean
 }
 
-// ---------- verificação GET ----------
+/** Compara em tempo constante (evita vazamento por tempo de resposta). */
+export function tempoConstanteIgual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false
+  let dif = 0
+  for (let i = 0; i < a.length; i++) dif |= a.charCodeAt(i) ^ b.charCodeAt(i)
+  return dif === 0
+}
+
+/** Verificação GET (hub.mode=subscribe + hub.verify_token). */
 export function respostaVerificacao(
   url: URL,
   verifyTokensValidos: string[],
@@ -60,143 +43,105 @@ export function respostaVerificacao(
   return { status: 403, corpo: 'forbidden' }
 }
 
-// ---------- mapeamento do corpo ----------
-export type ItemMeta = {
-  kind: 'message' | 'status' | 'other'
-  external_event_id: string
-  channel_account_id: string | null
-  organization_id: string | null
-  clinic_id: string | null
-  from_phone_e164: string | null
-  contact_name: string | null
-  message_type: string | null // text/image/audio/... (null em status)
-  text_body: string | null // vai para o banco; NUNCA para log
-  media_id: string | null
-  provider_message_id: string | null
-  status: string | null // sent/delivered/read/failed (em status)
-  error_code: string | null
-  occurred_at: string | null // ISO
-  stale: boolean
-  unsupported: boolean
+export { assinaturaValida }
+
+/** Verifica X-Hub-Signature-256 (HMAC-SHA256 do corpo bruto com o app secret). */
+async function assinaturaValida(
+  appSecret: string,
+  corpoBruto: string,
+  cabecalho: string | null,
+): Promise<boolean> {
+  if (!cabecalho || !appSecret) return false
+  const esperadoPrefixo = 'sha256='
+  if (!cabecalho.startsWith(esperadoPrefixo)) return false
+  const recebido = cabecalho.slice(esperadoPrefixo.length).toLowerCase()
+  const calculado = await hmacSha256Hex(appSecret, corpoBruto)
+  return tempoConstanteIgual(calculado, recebido)
 }
 
-type MetaValue = {
-  metadata?: { phone_number_id?: string }
-  contacts?: { wa_id?: string; profile?: { name?: string } }[]
-  messages?: {
-    id?: string
-    from?: string
-    timestamp?: string
-    type?: string
-    text?: { body?: string }
-  } & Record<string, unknown>[]
-  statuses?: {
-    id?: string
-    status?: string
-    timestamp?: string
-    errors?: { code?: number | string }[]
-  }[]
+async function hmacSha256Hex(chave: string, texto: string): Promise<string> {
+  const enc = new TextEncoder()
+  const key = await crypto.subtle.importKey(
+    'raw',
+    enc.encode(chave),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign'],
+  )
+  const sig = await crypto.subtle.sign('HMAC', key, enc.encode(texto))
+  return Array.from(new Uint8Array(sig))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('')
 }
 
-/** Converte "dígitos" da Meta em E.164 (+DDI já vem no from). */
-export function paraE164Meta(from: string | undefined): string | null {
-  if (!from || !/^\d{10,15}$/.test(from)) return null
-  return `+${from}`
-}
+export type MapaContas = Map<
+  string,
+  { id: string; organization_id: string; clinic_id: string }
+>
 
-/** timestamp em segundos Unix → ISO; null se inválido. */
-export function isoDeTimestampSegundos(ts: string | number | undefined): string | null {
-  const n = Number(ts)
-  if (!Number.isFinite(n) || n <= 0) return null
-  return new Date(n * 1000).toISOString()
-}
-
-/**
- * Mapeia o corpo do webhook da Meta em itens normalizados.
- * `contasPorPhoneNumberId` traz as contas ativas mapeadas (id/org/clinic).
- * Itens de número não mapeado voltam com channel_account_id null (RN-04:
- * recibo rejected_unmapped + fila técnica — decisão de gravação é do chamador).
- */
+/** Mapeia o corpo do webhook da Meta em itens normalizados. */
 export function mapearCorpoMeta(
   corpo: Record<string, unknown>,
-  contasPorPhoneNumberId: Map<string, { id: string; organization_id: string; clinic_id: string }>,
+  contasPorPhoneId: MapaContas,
+  agoraMs = Date.now(),
 ): ItemMeta[] {
   const itens: ItemMeta[] = []
-  const entries = Array.isArray(corpo?.entry) ? corpo.entry : []
-  for (const entry of entries as Record<string, unknown>[]) {
-    const changes = Array.isArray(entry?.changes) ? entry.changes : []
-    for (const change of changes as Record<string, unknown>[]) {
-      const value = (change?.value ?? {}) as MetaValue
-      const phoneNumberId = value?.metadata?.phone_number_id ?? ''
-      const conta = contasPorPhoneNumberId.get(phoneNumberId) ?? null
-      const contact = value?.contacts?.[0]
-      const waId = contact?.wa_id ?? null
-      const contactName = contact?.profile?.name ?? null
+  const entries = Array.isArray(corpo?.entry) ? (corpo.entry as Record<string, unknown>[]) : []
+  for (const entry of entries) {
+    const mudancas = Array.isArray(entry?.changes)
+      ? (entry.changes as Record<string, unknown>[])
+      : []
+    for (const mudanca of mudancas) {
+      const valor = (mudanca?.value ?? {}) as Record<string, unknown>
+      const metadata = (valor?.metadata ?? {}) as Record<string, unknown>
+      const phoneId = typeof metadata?.phone_number_id === 'string' ? metadata.phone_number_id : null
+      const conta = phoneId ? contasPorPhoneId.get(phoneId) : undefined
 
-      for (const msg of value?.messages ?? []) {
-        const tipo = typeof msg?.type === 'string' ? msg.type : 'unknown'
-        const occurredAt = isoDeTimestampSegundos(msg?.timestamp)
-        const stale =
-          occurredAt !== null && Date.now() - new Date(occurredAt).getTime() > TOLERANCIA_STALE_MS
-        const suportados = new Set([
-          'text',
-          'image',
-          'audio',
-          'document',
-          'video',
-          'sticker',
-          'location',
-          'reaction',
-        ])
-        const midiaId =
-          typeof (msg as Record<string, unknown>)?.[tipo]?.id === 'string'
-            ? ((msg as Record<string, unknown>)[tipo] as { id: string }).id
-            : null
-        itens.push({
-          kind: 'message',
-          external_event_id: typeof msg?.id === 'string' ? msg.id : '',
-          channel_account_id: conta?.id ?? null,
-          organization_id: conta?.organization_id ?? null,
-          clinic_id: conta?.clinic_id ?? null,
-          from_phone_e164: paraE164Meta(msg?.from),
-          contact_name: contactName,
-          message_type: tipo,
-          text_body: tipo === 'text' && typeof msg?.text?.body === 'string' ? msg.text.body : null,
-          media_id: midiaId,
-          provider_message_id: typeof msg?.id === 'string' ? msg.id : null,
-          status: null,
-          error_code: null,
-          occurred_at: occurredAt,
-          stale,
-          unsupported: !suportados.has(tipo),
-        })
-        if (waId && !itens[itens.length - 1].from_phone_e164) {
-          itens[itens.length - 1].from_phone_e164 = paraE164Meta(waId)
-        }
+      const base = {
+        channel_account_id: conta?.id ?? null,
+        organization_id: conta?.organization_id ?? null,
+        clinic_id: conta?.clinic_id ?? null,
       }
 
-      for (const st of value?.statuses ?? []) {
-        const occurredAt = isoDeTimestampSegundos(st?.timestamp)
-        const stale =
-          occurredAt !== null && Date.now() - new Date(occurredAt).getTime() > TOLERANCIA_STALE_MS
+      // ----- mensagens recebidas -----
+      const mensagens = Array.isArray(valor?.messages) ? (valor.messages as Record<string, unknown>[]) : []
+      for (const m of mensagens) {
+        const id = typeof m?.id === 'string' ? m.id : null
+        if (!id) continue
+        const tipo = typeof m?.type === 'string' ? m.type : 'unknown'
+        const suportado = ['text', 'image', 'audio', 'video', 'document', 'sticker', 'button', 'interactive'].includes(tipo)
+        const ts = Number(m?.timestamp)
+        const ocorridoMs = Number.isFinite(ts) ? ts * 1000 : agoraMs
+        itens.push({
+          kind: 'message',
+          external_event_id: `msg_${id}`,
+          ...base,
+          provider_message_id: id,
+          occurred_at: new Date(ocorridoMs).toISOString(),
+          stale: agoraMs - ocorridoMs > META_STALE_MS,
+          unsupported: !suportado,
+        })
+      }
+
+      // ----- situações (statuses) -----
+      const statuses = Array.isArray(valor?.statuses) ? (valor.statuses as Record<string, unknown>[]) : []
+      for (const s of statuses) {
+        const id = typeof s?.id === 'string' ? s.id : null
+        const status = typeof s?.status === 'string' ? s.status : null
+        if (!id || !status) continue
+        const ts = Number(s?.timestamp)
+        const ocorridoMs = Number.isFinite(ts) ? ts * 1000 : agoraMs
+        const erros = Array.isArray(s?.errors) ? (s.errors as Record<string, unknown>[]) : []
+        const codigo = erros.length && erros[0]?.code != null ? String(erros[0].code) : null
         itens.push({
           kind: 'status',
-          external_event_id: `${typeof st?.id === 'string' ? st.id : ''}:status`,
-          channel_account_id: conta?.id ?? null,
-          organization_id: conta?.organization_id ?? null,
-          clinic_id: conta?.clinic_id ?? null,
-          from_phone_e164: null,
-          contact_name: null,
-          message_type: null,
-          text_body: null,
-          media_id: null,
-          provider_message_id: typeof st?.id === 'string' ? st.id : null,
-          status: typeof st?.status === 'string' ? st.status : null,
-          error_code:
-            Array.isArray(st?.errors) && st.errors.length ? String(st.errors[0]?.code ?? '') : null,
-          occurred_at: occurredAt,
-          stale,
-          unsupported: false,
+          external_event_id: `sts_${id}_${status}_${s?.timestamp ?? ''}`,
+          ...base,
+          provider_message_id: id,
+          status,
+          error_code: codigo,
+          occurred_at: new Date(ocorridoMs).toISOString(),
+          stale: agoraMs - ocorridoMs > META_STALE_MS,
         })
       }
     }
@@ -204,98 +149,6 @@ export function mapearCorpoMeta(
   return itens
 }
 
-// ---------- envio (adaptador de saída) ----------
-export type EnvioMetaResultado = {
-  ok: boolean
-  provider_message_id: string | null
-  http_status: number
-  error_code: string | null // código curto sanitizado (sem corpo da Meta)
-}
-
-/**
- * POST /<versão>/<phone_number_id>/messages com Bearer do Vault.
- * `texto` e `modelo` montam o corpo conforme a SPEC. Timeout 10s.
- * Retries NÃO acontecem aqui — a fila controla (contrato comum 4.4).
- */
-export async function enviarMeta(
-  graphVersion: string,
-  phoneNumberId: string,
-  token: string,
-  corpo: Record<string, unknown>,
-  correlationId: string,
-  opcoes: Record<string, unknown> = {},
-): Promise<EnvioMetaResultado> {
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), 10_000)
-  try {
-    const headers: Record<string, string> = {
-      Authorization: `Bearer ${token}`, // só no header — nunca em log
-      'Content-Type': 'application/json',
-      'x-correlation-id': correlationId,
-    }
-    // gancho de teste (runner): roteia o fetch stub por cenário sem tocar na URL
-    if (opcoes.cenarioTeste) headers['x-cenario-teste'] = String(opcoes.cenarioTeste)
-    const resp = await fetch(
-      `https://graph.facebook.com/${graphVersion}/${phoneNumberId}/messages`,
-      {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(corpo),
-        signal: controller.signal,
-      },
-    )
-    const data = (await resp.json().catch(() => ({}))) as {
-      messages?: { id?: string }[]
-      error?: { code?: number | string; message?: string }
-    }
-    if (resp.ok) {
-      return {
-        ok: true,
-        provider_message_id: data?.messages?.[0]?.id ?? null,
-        http_status: resp.status,
-        error_code: null,
-      }
-    }
-    return {
-      ok: false,
-      provider_message_id: null,
-      http_status: resp.status,
-      error_code: data?.error?.code != null ? String(data.error.code) : `http_${resp.status}`,
-    }
-  } catch (e: unknown) {
-    const nome = (e as { name?: string })?.name ?? ''
-    return {
-      ok: false,
-      provider_message_id: null,
-      http_status: 0,
-      error_code: nome === 'AbortError' ? 'tempo_esgotado' : 'falha_rede',
-    }
-  } finally {
-    clearTimeout(timer)
-  }
-}
-
-/** Corpo de envio de TEXTO livre (janela aberta). */
-export function corpoTexto(to: string, texto: string): Record<string, unknown> {
-  return {
-    messaging_product: 'whatsapp',
-    to,
-    type: 'text',
-    text: { body: texto },
-  }
-}
-
-/** Corpo de envio de MODELO aprovado (janela fechada). */
-export function corpoModelo(
-  to: string,
-  templateName: string,
-  templateLanguage: string,
-  components: unknown[] = [],
-): Record<string, unknown> {
-  return {
-    messaging_product: 'whatsapp',
-    to,
-    type: 'template',
-    template: { name: templateName, language: { code: templateLanguage }, components },
-  }
-}
+export type EnvioMeta =
+  | { tipo: 'texto'; para: string; texto: string }
+  | { tipo: 'modelo'; para: string; modelo: string; idioma: string; variaveis?: string[] }

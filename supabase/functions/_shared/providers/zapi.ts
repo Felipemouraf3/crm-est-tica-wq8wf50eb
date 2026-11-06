@@ -1,6 +1,5 @@
-// supabase/functions/_shared/providers/zapi.ts — P2-S03-T03
-// Adaptador da Z-API (WhatsApp não oficial) conforme SPEC-P2-S03.
-// Telemetria sanitizada. Compatível Deno (WebCrypto). Sem `as any`.
+// supabase/functions/_shared/providers/zapi.ts — P2-S03-T03 (v3 com imageUrl + caption)
+// Adaptador da Z-API conforme SPEC-P2-S03. Telemetria sanitizada. Sem `as any`.
 export const ZAPI_BASE = 'https://api.z-api.io'
 export const JANELA_24H_MS = 24 * 60 * 60 * 1000
 export const TOLERANCIA_STALE_MS = JANELA_24H_MS
@@ -38,20 +37,20 @@ type ZapiBody = Record<string, unknown> & {
   isGroup?: boolean
   isNewsletter?: boolean
   text?: { message?: string }
-  image?: { id?: string; caption?: string }
-  audio?: { id?: string }
-  video?: { id?: string }
-  document?: { id?: string }
+  image?: { id?: string; caption?: string; imageUrl?: string; link?: string; url?: string }
+  audio?: { id?: string; link?: string; url?: string }
+  video?: { id?: string; videoUrl?: string; link?: string; url?: string }
+  document?: { id?: string; link?: string; url?: string }
   ids?: unknown[]
   status?: string
   connected?: boolean
+  error?: string
+  errorCode?: string
 }
 
 export function paraE164Zapi(phone: string | undefined | null): string | null {
   if (!phone) return null
-  const digitos = String(phone)
-    .replace(/@c\.us$/, '')
-    .replace(/\D/g, '')
+  const digitos = String(phone).replace(/@c\.us$/, '').replace(/\D/g, '')
   if (!/^\d{10,15}$/.test(digitos)) return null
   return `+${digitos}`
 }
@@ -79,26 +78,23 @@ export function statusZapiParaInterno(status: string | undefined): string | null
 
 function midiaIdDe(msg: ZapiBody): { tipo: string; id: string } | null {
   for (const tipo of ['image', 'audio', 'video', 'document'] as const) {
-    const obj = msg[tipo] as { id?: string } | undefined
-    if (obj && typeof obj.id === 'string') return { tipo, id: obj.id }
+    const obj = msg[tipo] as { id?: string; imageUrl?: string; link?: string; url?: string } | undefined
+    if (!obj || typeof obj !== 'object') continue
+    // Z-API real: image.imageUrl (sem id); doc oficial também aceita link/url.
+    const id = [obj.id, obj.imageUrl, obj.link, obj.url].find((v) => typeof v === 'string' && v !== '')
+    if (id) return { tipo, id }
   }
   return null
 }
 
 export function mapearCorpoZapi(
   corpo: ZapiBody,
-  conta: {
-    id: string
-    organization_id: string
-    clinic_id: string
-    external_account_id: string
-  } | null,
+  conta: { id: string; organization_id: string; clinic_id: string; external_account_id: string } | null,
 ): ItemZapi[] {
   const itens: ItemZapi[] = []
   const tipo = typeof corpo?.type === 'string' ? corpo.type : ''
   const occurredAt = isoDeMomment(corpo?.momment)
-  const stale =
-    occurredAt !== null && Date.now() - new Date(occurredAt).getTime() > TOLERANCIA_STALE_MS
+  const stale = occurredAt !== null && Date.now() - new Date(occurredAt).getTime() > TOLERANCIA_STALE_MS
 
   const base = {
     channel_account_id: conta?.id ?? null,
@@ -153,9 +149,7 @@ export function mapearCorpoZapi(
   if (tipo === 'MessageStatusCallback') {
     const ids = Array.isArray(corpo?.ids) ? (corpo.ids as unknown[]) : []
     const primeiroId = typeof ids[0] === 'string' ? ids[0] : ''
-    const statusInterno = statusZapiParaInterno(
-      typeof corpo?.status === 'string' ? corpo.status : undefined,
-    )
+    const statusInterno = statusZapiParaInterno(typeof corpo?.status === 'string' ? corpo.status : undefined)
     itens.push({
       ...base,
       kind: 'status',
@@ -177,11 +171,43 @@ export function mapearCorpoZapi(
     return itens
   }
 
+  // DeliveryCallback: confirmação de envio (webhook Ao enviar) — sucesso = sem error
+  if (tipo === 'DeliveryCallback') {
+    const messageId = typeof corpo?.messageId === 'string' ? corpo.messageId : ''
+    const temErro = typeof corpo?.error === 'string' && corpo.error.length > 0
+    itens.push({
+      ...base,
+      kind: 'status',
+      external_event_id: `${messageId}:status`,
+      from_phone_e164: null,
+      contact_name: null,
+      message_type: null,
+      text_body: null,
+      media_id: null,
+      provider_message_id: messageId || null,
+      status: temErro ? 'failed' : 'sent',
+      error_code: temErro
+        ? (typeof corpo?.errorCode === 'string' ? corpo.errorCode : 'delivery_error')
+        : null,
+      occurred_at: occurredAt,
+      stale,
+      unsupported: false,
+      desconectar: false,
+      reconectar: false,
+    })
+    return itens
+  }
+
   if (tipo === 'ReceivedCallback') {
     const isGroup = corpo?.isGroup === true || corpo?.isNewsletter === true
     const messageId = typeof corpo?.messageId === 'string' ? corpo.messageId : ''
     const midia = midiaIdDe(corpo)
-    const texto = typeof corpo?.text?.message === 'string' ? corpo.text.message : null
+    const texto =
+      typeof corpo?.text?.message === 'string' && corpo.text.message !== ''
+        ? corpo.text.message
+        : midia && typeof (corpo?.[midia.tipo] as { caption?: string })?.caption === 'string'
+          ? ((corpo?.[midia.tipo] as { caption?: string }).caption as string)
+          : null
     itens.push({
       ...base,
       kind: 'message',
@@ -241,12 +267,7 @@ export async function enviarZapi(
   opcoes: Record<string, unknown> = {},
 ): Promise<EnvioZapiResultado> {
   if (!instanceId || !token || !clientToken || !destinoE164 || !texto) {
-    return {
-      ok: false,
-      provider_message_id: null,
-      http_status: 0,
-      error_code: 'credencial_ausente',
-    }
+    return { ok: false, provider_message_id: null, http_status: 0, error_code: 'credencial_ausente' }
   }
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), 10_000)
@@ -273,12 +294,7 @@ export async function enviarZapi(
       message?: string
     }
     if (resp.ok && typeof data?.messageId === 'string') {
-      return {
-        ok: true,
-        provider_message_id: data.messageId,
-        http_status: resp.status,
-        error_code: null,
-      }
+      return { ok: true, provider_message_id: data.messageId, http_status: resp.status, error_code: null }
     }
     return {
       ok: false,
