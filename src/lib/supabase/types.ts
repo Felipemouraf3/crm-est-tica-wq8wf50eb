@@ -195,7 +195,7 @@ export type Database = {
         Insert: {
           created_at?: string
           id?: string
-          key: string
+          key?: string
           max_autonomy?: string
           name: string
           output_schema?: Json | null
@@ -296,8 +296,8 @@ export type Database = {
           id?: string
           run_id: string
           status: string
-          step: number
-          tool: string
+          step?: number
+          tool?: string
         }
         Update: {
           created_at?: string
@@ -722,10 +722,14 @@ export type Database = {
         Row: {
           capabilities: Json
           clinic_id: string
+          code_verification_status: string | null
           created_at: string
           display_name: string | null
           external_account_id: string
           external_business_id: string | null
+          health_checked_at: string | null
+          health_detail: Json | null
+          health_status: string | null
           id: string
           integration_connection_id: string
           last_error_code: string | null
@@ -734,6 +738,7 @@ export type Database = {
           last_status_at: string | null
           organization_id: string
           phone_e164: string
+          platform_type: string | null
           provider: string
           status: string
           updated_at: string
@@ -742,10 +747,14 @@ export type Database = {
         Insert: {
           capabilities?: Json
           clinic_id: string
+          code_verification_status?: string | null
           created_at?: string
           display_name?: string | null
           external_account_id: string
           external_business_id?: string | null
+          health_checked_at?: string | null
+          health_detail?: Json | null
+          health_status?: string | null
           id?: string
           integration_connection_id: string
           last_error_code?: string | null
@@ -754,6 +763,7 @@ export type Database = {
           last_status_at?: string | null
           organization_id: string
           phone_e164: string
+          platform_type?: string | null
           provider: string
           status?: string
           updated_at?: string
@@ -762,10 +772,14 @@ export type Database = {
         Update: {
           capabilities?: Json
           clinic_id?: string
+          code_verification_status?: string | null
           created_at?: string
           display_name?: string | null
           external_account_id?: string
           external_business_id?: string | null
+          health_checked_at?: string | null
+          health_detail?: Json | null
+          health_status?: string | null
           id?: string
           integration_connection_id?: string
           last_error_code?: string | null
@@ -774,6 +788,7 @@ export type Database = {
           last_status_at?: string | null
           organization_id?: string
           phone_e164?: string
+          platform_type?: string | null
           provider?: string
           status?: string
           updated_at?: string
@@ -859,7 +874,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
-          code: string
+          code?: string
           created_at?: string
           id?: string
           name: string
@@ -983,7 +998,7 @@ export type Database = {
           published_at?: string
           published_by?: string | null
           secret_ref: string
-          version: number
+          version?: number
         }
         Update: {
           clinic_id?: string | null
@@ -1022,13 +1037,13 @@ export type Database = {
         Insert: {
           captured_at?: string
           captured_by?: string | null
-          channel: string
+          channel?: string
           contact_id: string
           id?: string
-          organization_id: string
-          purpose: string
-          source: string
-          status: string
+          organization_id?: string
+          purpose?: string
+          source?: string
+          status?: string
         }
         Update: {
           captured_at?: string
@@ -1077,12 +1092,12 @@ export type Database = {
           verified_at: string | null
         }
         Insert: {
-          channel: string
+          channel?: string
           contact_id: string
           created_at?: string
           external_id?: string | null
           id?: string
-          normalized_value: string
+          normalized_value?: string
           updated_at?: string
           verified_at?: string | null
         }
@@ -1513,7 +1528,7 @@ export type Database = {
         Insert: {
           active?: boolean
           created_at?: string
-          expert_uuid: string
+          expert_uuid?: string
           id?: string
           name: string
           organization_id: string
@@ -1554,7 +1569,7 @@ export type Database = {
         Insert: {
           active?: boolean
           created_at?: string
-          expert_id: number
+          expert_id?: number
           id?: string
           name: string
           organization_id: string
@@ -1891,10 +1906,10 @@ export type Database = {
           task_id: string | null
         }
         Insert: {
-          attempt: number
+          attempt?: number
           clinic_id: string
           created_at?: string
-          delay_days: number
+          delay_days?: number
           enrollment_id: string
           executed_at?: string | null
           id?: string
@@ -1976,7 +1991,7 @@ export type Database = {
           id?: string
           last_tested_at?: string | null
           organization_id: string
-          provider: string
+          provider?: string
           secret_ref: string
           updated_at?: string
         }
@@ -2080,7 +2095,7 @@ export type Database = {
           clinic_id: string
           created_at?: string
           id?: string
-          intent: string
+          intent?: string
           priority?: number
           queue_id?: string | null
           updated_at?: string
@@ -2301,9 +2316,9 @@ export type Database = {
           created_at?: string
           id?: string
           is_draft?: boolean
-          key: string
-          label: string
-          organization_id: string
+          key?: string
+          label?: string
+          organization_id?: string
           updated_at?: string
         }
         Update: {
@@ -2353,7 +2368,7 @@ export type Database = {
           id?: string
           invite_status?: string
           organization_id: string
-          role: string
+          role?: string
           updated_at?: string
           user_id: string
         }
@@ -2419,7 +2434,7 @@ export type Database = {
           scan_status?: string
           sha256?: string | null
           size_bytes?: number | null
-          storage_path: string
+          storage_path?: string
         }
         Update: {
           clinic_id?: string
@@ -2487,7 +2502,7 @@ export type Database = {
           language?: string
           name: string
           organization_id: string
-          provider: string
+          provider?: string
           provider_status?: string
           purpose: string
           status?: string
@@ -2546,13 +2561,13 @@ export type Database = {
           occurred_at?: string
           organization_id: string
           outbound_request_id?: string | null
-          provider: string
+          provider?: string
           provider_message_id?: string | null
           read_at?: string | null
           sender_type: string
           sender_user_id?: string | null
           sent_at?: string | null
-          status: string
+          status?: string
         }
         Update: {
           body?: string | null
@@ -2968,9 +2983,9 @@ export type Database = {
         Insert: {
           created_at?: string
           id?: string
-          name: string
+          name?: string
           status?: string
-          timezone: string
+          timezone?: string
           updated_at?: string
         }
         Update: {
@@ -3077,7 +3092,7 @@ export type Database = {
           id?: string
           is_final_lost?: boolean
           is_final_won?: boolean
-          key: string
+          key?: string
           label: string
           pipeline_id: string
           position?: number
@@ -3181,11 +3196,11 @@ export type Database = {
           clinic_id?: string | null
           condition?: Json
           created_at?: string
-          effect: string
+          effect?: string
           id?: string
           priority?: number
-          reason_code: string
-          rule_key: string
+          reason_code?: string
+          rule_key?: string
           scope?: string
           updated_at?: string
           version?: number
@@ -3239,7 +3254,7 @@ export type Database = {
           organization_id: string
           procedure_expert_id: number
           professional_expert_id?: number | null
-          professional_expert_uuid: string
+          professional_expert_uuid?: string
           professional_name?: string | null
           source?: string
           synced_at?: string
@@ -3323,7 +3338,7 @@ export type Database = {
         }
         Insert: {
           active_version_id?: string | null
-          agent_key: string
+          agent_key?: string
           clinic_id?: string | null
           created_at?: string
           id?: string
@@ -3383,7 +3398,7 @@ export type Database = {
           published_at?: string | null
           sandbox_result?: Json | null
           status?: string
-          version: number
+          version?: number
         }
         Update: {
           allowed_variables?: string[]
@@ -3427,7 +3442,7 @@ export type Database = {
           id?: string
           occurred_at: string
           organization_id: string
-          provider: string
+          provider?: string
           provider_message_id: string
           status: string
         }
@@ -3746,7 +3761,7 @@ export type Database = {
           last_error?: string | null
           last_success_at?: string | null
           organization_id: string
-          resource: string
+          resource?: string
           status?: string
           updated_at?: string
         }
@@ -4071,8 +4086,8 @@ export type Database = {
           ticket_id: string
         }
         Insert: {
-          acknowledged_at?: string | null
-          breached_at?: string | null
+          acknowledged_at: string | null
+          breached_at: string | null
           clinic_id: string
           created_at?: string
           due_at: string
@@ -4223,9 +4238,9 @@ export type Database = {
         Insert: {
           clinic_id: string
           created_at?: string
-          ends_at: string
+          ends_at?: string
           id?: string
-          starts_at: string
+          starts_at?: string
           status?: string
           updated_at?: string
           user_id: string
@@ -4495,7 +4510,7 @@ export type Database = {
           p_delays_days?: number[]
           p_max_attempts?: number
           p_name: string
-          p_trigger_after_hours?: number
+          p_trigger_after_hours?: string
           p_trigger_kind?: string
         }
         Returns: Json

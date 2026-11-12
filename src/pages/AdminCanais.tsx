@@ -1,7 +1,12 @@
-// src/pages/AdminCanais.tsx — P2-S03-T01 (+ edição na T02c, 27/10)
+// src/pages/AdminCanais.tsx — P2-S03-T01 (+ edição T02c, 27/10) — Fase A 12/11
 // Tela /admin/canais: lista de números, cadastro Meta/Z-API, edição, teste de
-// conexão, pausar/reativar/desativar. Segredos NUNCA reaparecem — o
-// verify_token/URL do webhook é mostrado uma única vez (SPEC).
+// conexão REAL (Edge admin-test-channel v3 — veredito honesto, não mais
+// "tem token = healthy"), pausar/reativar/desativar. Segredos NUNCA
+// reaparecem — o verify_token/URL do webhook é mostrado uma única vez (SPEC).
+// Fase A (12/11): o teste chama a Edge que lê status/platform_type/
+// code_verification_status da Graph API; canal ON_PREMISE aparece com badge
+// vermelho "ON_PREMISE — não envia nem recebe" e a lista mostra o veredito
+// da última verificação real (health_status) gravado no banco.
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase/client'
 import { useToast } from '@/hooks/use-toast'
@@ -29,6 +34,15 @@ const ROTULO_STATUS: Record<string, { texto: string; cor: string }> = {
   paused: { texto: 'Pausado', cor: 'bg-amber-100 text-amber-800' },
   disconnected: { texto: 'Desconectado', cor: 'bg-red-100 text-red-800' },
   disabled: { texto: 'Desativado', cor: 'bg-gray-100 text-gray-500' },
+}
+
+// Veredito do teste real (Fase A) — espelha a Edge admin-test-channel v3
+const ROTULO_HEALTH: Record<string, { texto: string; cor: string }> = {
+  healthy: { texto: 'Verificado agora — OK', cor: 'bg-green-100 text-green-800' },
+  inoperante: { texto: 'Inoperante — não envia nem recebe', cor: 'bg-red-100 text-red-800' },
+  not_configured: { texto: 'Sem token gravado', cor: 'bg-gray-100 text-gray-700' },
+  error: { texto: 'Erro no teste', cor: 'bg-red-100 text-red-800' },
+  erro_rede: { texto: 'Falha de rede no teste', cor: 'bg-red-100 text-red-800' },
 }
 
 function dataRelativa(iso: string | null): string {
@@ -178,17 +192,35 @@ export default function AdminCanais() {
   async function testarCanal(c: Canal) {
     setTestando(c.id)
     try {
-      const { data, error } = await supabase.rpc('admin_test_channel', {
-        p_channel_account_id: c.id,
-      })
-      if (error) throw error
-      const r = data?.[0]
-      const saudavel = r?.health_status === 'healthy'
+      // Fase A (12/11): teste REAL na Edge admin-test-channel v3 — lê
+      // status/platform_type/code_verification_status da Graph API e dá o
+      // veredito honesto. (Antes: RPC que só conferia se havia token no Vault.)
+      const { data: sessionData } = await supabase.auth.getSession()
+      const accessToken = sessionData?.session?.access_token
+      if (!accessToken) throw new Error('Sessão expirada — entre de novo')
+      const resp = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-test-channel`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ channel_account_id: c.id }),
+        },
+      )
+      const corpo = (await resp.json().catch(() => null)) as {
+        data?: { health_status?: string; mensagem?: string }
+      } | null
+      const r = corpo?.data
+      if (!r) throw new Error('Sem resposta do teste')
+      const saudavel = r.health_status === 'healthy'
       toast({
-        title: saudavel ? 'Conexão saudável' : 'Conexão com erro',
-        description: String((r?.diagnostico as Record<string, unknown> | null)?.mensagem ?? ''),
+        title: saudavel ? 'Conexão saudável' : 'Conexão inoperante',
+        description: String(r.mensagem ?? ''),
         variant: saudavel ? 'default' : 'destructive',
       })
+      await carregar(clinicaId!)
     } catch (e) {
       toast({ title: 'Falha no teste', description: (e as Error).message, variant: 'destructive' })
     } finally {
@@ -236,6 +268,11 @@ export default function AdminCanais() {
         <div className="space-y-3">
           {canais.map((c) => {
             const st = ROTULO_STATUS[c.status] ?? ROTULO_STATUS.draft
+            const hp = c.health_status ? (ROTULO_HEALTH[c.health_status] ?? null) : null
+            const plataformaErrada =
+              c.provider === 'meta_cloud' &&
+              c.platform_type != null &&
+              c.platform_type !== 'CLOUD_API'
             return (
               <Card key={c.id}>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -246,16 +283,40 @@ export default function AdminCanais() {
                       <span className="text-xs font-normal text-[#6B6560]">({c.display_name})</span>
                     )}
                   </CardTitle>
-                  <Badge className={st.cor}>{st.texto}</Badge>
+                  <div className="flex items-center gap-2">
+                    {plataformaErrada && (
+                      <Badge className="bg-red-100 text-red-800">
+                        {c.platform_type} — não envia nem recebe
+                      </Badge>
+                    )}
+                    {hp && <Badge className={hp.cor}>{hp.texto}</Badge>}
+                    <Badge className={st.cor}>{st.texto}</Badge>
+                  </div>
                 </CardHeader>
                 <CardContent>
                   <p className="text-xs text-[#6B6560]">
                     {c.provider === 'meta_cloud' ? 'Meta Cloud API' : 'Z-API'} · ID externo:{' '}
                     <span className="font-mono">{c.external_account_id}</span>
+                    {c.platform_type && (
+                      <>
+                        {' '}
+                        · Plataforma na Meta:{' '}
+                        <span
+                          className={
+                            plataformaErrada ? 'font-semibold text-[#D93025]' : 'font-semibold'
+                          }
+                        >
+                          {c.platform_type}
+                        </span>
+                      </>
+                    )}
                   </p>
                   <p className="mt-1 text-xs text-[#6B6560]">
                     Última entrada: {dataRelativa(c.last_inbound_at)} · Última saída:{' '}
                     {dataRelativa(c.last_outbound_at)}
+                    {c.health_checked_at && (
+                      <> · Último teste: {dataRelativa(c.health_checked_at)}</>
+                    )}
                     {c.last_error_code && (
                       <>
                         {' '}
